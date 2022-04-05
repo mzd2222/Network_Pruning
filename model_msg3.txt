@@ -1,0 +1,13 @@
+9 0 0.767 768 1024 20 0.01 0.57 0.5869565606117249 [0, 1, 2, 3, 4] False 4 ./models/ResNet/version9_resnet56_after_model_0.pkl 
+9 1 0.7876 768 1024 30 0.01 0.57 0.5869565606117249 [0, 1, 2, 3, 4] False 4 ./models/ResNet/version9_resnet56_after_model_1.pkl 
+9 2 0.7992 768 1024 40 0.01 0.57 0.5872035622596741 [0, 1, 2, 3, 4] False 4 ./models/ResNet/version9_resnet56_after_model_2.pkl 
+9 3 0.8088 768 1024 50 0.01 0.57 0.5872035622596741 [0, 1, 2, 3, 4] False 4 ./models/ResNet/version9_resnet56_after_model_3.pkl 
+9 4 0.7886 768 1024 60 0.01 0.57 0.5869565606117249 [0, 1, 2, 3, 4] False 4 ./models/ResNet/version9_resnet56_after_model_4.pkl 
+9 0 0.7854 768 1024 30 0.01 0.562 0.5731225609779358 [0, 1, 2, 3, 4] False 4 版本备注: 冻结除bn和fc的其他层，bn层冻结 ./models/ResNet/version9_resnet56_after_model_0.pkl 
+9 1 0.8138 768 1024 40 0.01 0.562 0.573369562625885 [0, 1, 2, 3, 4] False 4 版本备注: 冻结除bn和fc的其他层，bn层冻结 ./models/ResNet/version9_resnet56_after_model_1.pkl 
+9 2 0.803 768 1024 50 0.01 0.562 0.573369562625885 [0, 1, 2, 3, 4] False 4 版本备注: 冻结除bn和fc的其他层，bn层冻结 ./models/ResNet/version9_resnet56_after_model_2.pkl 
+9 3 0.8024 768 1024 60 0.01 0.562 0.573369562625885 [0, 1, 2, 3, 4] False 4 版本备注: 冻结除bn和fc的其他层，bn层冻结 ./models/ResNet/version9_resnet56_after_model_3.pkl 
+9 4 0.8164 768 1024 70 0.01 0.562 0.5731225609779358 [0, 1, 2, 3, 4] False 4 版本备注: 冻结除bn和fc的其他层，bn层冻结 ./models/ResNet/version9_resnet56_after_model_4.pkl 
+9 5 0.8114 768 1024 80 0.01 0.562 0.5728754997253418 [0, 1, 2, 3, 4] False 4 版本备注: 冻结除bn和fc的其他层，bn层冻结 ./models/ResNet/version9_resnet56_after_model_5.pkl 
+9 6 0.8088 768 1024 90 0.01 0.562 0.573369562625885 [0, 1, 2, 3, 4] False 4 版本备注: 冻结除bn和fc的其他层，bn层冻结 ./models/ResNet/version9_resnet56_after_model_6.pkl 
+9 7 0.8122 768 1024 100 0.01 0.562 0.5731225609779358 [0, 1, 2, 3, 4] False 4 版本备注: 冻结除bn和fc的其他层，bn层冻结 ./models/ResNet/version9_resnet56_after_model_7.pkl 
