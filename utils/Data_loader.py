@@ -4,7 +4,7 @@ from torchvision import datasets, transforms
 
 class Data_Loader_CIFAR:
 
-    def __init__(self, train_batch_size, test_batch_size, dataSet='CIFAR10', data_path='./data/'):
+    def __init__(self, train_batch_size, test_batch_size, dataSet='CIFAR10', data_path='./data/', download=False):
         if dataSet == 'CIFAR10':
             mean = [0.4940607, 0.4850613, 0.45037037]
             std = [0.20085774, 0.19870903, 0.20153421]
@@ -27,12 +27,12 @@ class Data_Loader_CIFAR:
         ])
 
         if dataSet == 'CIFAR100':
-            train_data_set = datasets.CIFAR100(data_path, transform=train_transform, download=False, train=True)
-            test_data_set = datasets.CIFAR100(data_path, transform=test_transform, download=False, train=False)
+            train_data_set = datasets.CIFAR100(data_path, transform=train_transform, download=download, train=True)
+            test_data_set = datasets.CIFAR100(data_path, transform=test_transform, download=download, train=False)
 
         elif dataSet == 'CIFAR10':
-            train_data_set = datasets.CIFAR10(data_path, transform=train_transform, download=False, train=True)
-            test_data_set = datasets.CIFAR10(data_path, transform=test_transform, download=False, train=False)
+            train_data_set = datasets.CIFAR10(data_path, transform=train_transform, download=download, train=True)
+            test_data_set = datasets.CIFAR10(data_path, transform=test_transform, download=download, train=False)
 
         self.train_data_loader = dataloader.DataLoader(train_data_set, batch_size=train_batch_size, shuffle=True)
         self.test_data_loader = dataloader.DataLoader(test_data_set, batch_size=test_batch_size, shuffle=True)

@@ -327,6 +327,8 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
     for idx in range(len(reserved_classes)):
         counts.append(0)
         redundancy_counts.append(0)
+        img_list.append([])
+        label_list.append([])
 
     if use_KL:
         image_Kc_list = np.zeros([len(reserved_classes), pics_num])
@@ -345,7 +347,7 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
             else:
                 continue
 
-            if label[idx] in reserved_classes and counts[list_idx] < pics_num:
+            if counts[list_idx] < pics_num:
 
                 # 使用kl-divergence 且图片还未满
                 if use_KL:
@@ -373,6 +375,7 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
                             KL_all = 0
                             samples = [ig for ig in range(counts[list_idx])]
                             sample = random.sample(samples, int(pics_num / divide_radio))
+
                             for random_i in sample:
                                 # data[idx]当前图片 img_list[list_idx][random_i]已存图片随机选择一张
                                 KL_all += F.kl_div(data[idx].softmax(dim=dim).log(),
@@ -383,16 +386,16 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
                         # 储存当前图片的Kc值
                         image_Kc_list[list_idx][counts[list_idx]] = Kc
 
-                img_list.append(data[idx])
-                label_list.append(label[idx])
+                img_list[list_idx].append(data[idx])
+                label_list[list_idx].append(label[idx])
                 counts[list_idx] += 1
 
             # 使用kl且图片已满，冗余
             elif use_KL and redundancy_counts[list_idx] < redundancy_num and counts[list_idx] == pics_num:
 
                 Kc_min = min(image_Kc_list[list_idx])
-                Kc_min_idx = image_Kc_list[list_idx].index(Kc_min)
-                # Kc_min_idx = np.argmin(image_Kc_list[list_idx])
+                # Kc_min_idx = image_Kc_list[list_idx].index(Kc_min)
+                Kc_min_idx = np.argmin(image_Kc_list[list_idx])
 
                 KL_all = 0
 
@@ -413,8 +416,13 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
                     label_list[list_idx][Kc_min_idx] = label[idx]
                     redundancy_counts[list_idx] += 1
 
+    imgs = []
+    labels = []
+    for i, j in zip(img_list, label_list):
+        imgs += i
+        labels += j
 
-    mydataset = myDataset(img_list, label_list)
+    mydataset = myDataset(imgs, labels)
 
     new_data_loader = dataloader.DataLoader(mydataset, batch_size=batch_size, shuffle=True)
 

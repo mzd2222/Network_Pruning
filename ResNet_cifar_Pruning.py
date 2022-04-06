@@ -302,6 +302,7 @@ if __name__ == '__main__':
     # model = resnet56(num_classes=data_loader.dataset_num_class).to(device)
     # model = torch.load(f='./models/ResNet/resnet32_before_9393.pkl').to(device)
     model = torch.load(f='./models/ResNet/resnet56_before_9423.pkl').to(device)
+    # model = torch.load(f='../input/resnet-pruning-cifar-code/models/ResNet/resnet56_before_9423.pkl').to(device)
 
     # --------------------------------------------- 剪枝前模型测试
     # epoch_acc, epoch_class_correct, epoch_class_acc = all_test(model, data_loader.test_data_loader,
@@ -326,16 +327,19 @@ if __name__ == '__main__':
 
     reserved_classes_list = [[0, 1, 2, 3, 4]]
 
-    version_id = 0  # 指定
-    model_id = 0  # 保存模型的id
-    fine_tuning_epoch = 50
+    version_id = 2  # 指定
+    model_id = 0    # 保存模型的id
+
+    fine_tuning_epoch = 80
+    manual_radio = 0.562
 
     fine_tuning_lr = 0.01
-    fine_tuning_batch_size = 768
+    fine_tuning_batch_size = 512
     fine_tuning_pics_num = 1024
 
     use_KL_divergence = False
     divide_radio = 4
+    redundancy_num = 1024
 
     frozen = False
 
@@ -344,93 +348,90 @@ if __name__ == '__main__':
     # version_msg = "版本备注:冻结除bn和fc的其他层,bn层冻结"
 
     reserved_classes = [0, 1, 2, 3, 4]
-    fine_tuning_epoch_list = [30, 40, 50, 60, 70, 80, 90, 100]
+
+    # ----------------------------------------------------------------------
+    # --------------
+    # ----------------------------------------------------------------------
+
+    imgs = read_Img_by_class(target_class=reserved_classes, pics_num=100,
+                             data_loader=data_loader.test_data_loader, device=device)
+    layer_masks = Compute_layer_mask(imgs=imgs, model=model, percent=manual_radio, device=device)
+    # --------------------------------------------- 预剪枝,计算mask
+    cfg, cfg_masks, pruned_radio = pre_processing_Pruning(model, layer_masks)
 
     # for reserved_classes in reserved_classes_list:
+    # redundancy_num_list = [128, 256, 512, 1024]
+    fine_tuning_epoch_list = [30, 40, 50, 60, 70, 80, 90, 100]
     for fine_tuning_epoch in fine_tuning_epoch_list:
 
-        manual_radio = 0.562
+        new_model = resnet56(data_loader.dataset_num_class, cfg=cfg).to(device)
+        # --------------------------------------------- 正式剪枝,参数拷贝
+        model_after_pruning = Real_Pruning(old_model=model, new_model=new_model,
+                                           cfg_masks=cfg_masks, reserved_class=reserved_classes)
+        print("model_id: " + str(model_id) + "  运行：")
 
-        imgs = read_Img_by_class(target_class=reserved_classes, pics_num=100,
-                                 data_loader=data_loader.test_data_loader, device=device)
+        # --------------------------------------------- 微调
+        # model_save_path = '/kaggle/working/version'
+        model_save_path = './models/ResNet/version'
 
-        while manual_radio < 0.58:
-            print("model_id: " + str(model_id) + "  运行：")
-            layer_masks = Compute_layer_mask(imgs=imgs, model=model, percent=manual_radio, device=device)
-            cfg, cfg_masks, pruned_radio = pre_processing_Pruning(model, layer_masks)
+        model_save_path += str(version_id) + '_resnet56_after_model_' + str(model_id) + '.pkl'
 
-            # 由于fc和cs此时没有对齐，所以此时的new_model暂时不可用
-            new_model = resnet56(data_loader.dataset_num_class, cfg=cfg).to(device)
-            # print(new_model)
+        fine_tuning_loader = get_fine_tuning_data_loader(reserved_classes,
+                                                         pics_num=fine_tuning_pics_num,
+                                                         batch_size=fine_tuning_batch_size,
+                                                         data_loader=data_loader.train_data_loader,
+                                                         use_KL=use_KL_divergence,
+                                                         redundancy_num=redundancy_num,
+                                                         divide_radio=divide_radio)
 
-            # --------------------------------------------- 正式剪枝,参数拷贝
-            model_after_pruning = Real_Pruning(old_model=model, new_model=new_model,
-                                               cfg_masks=cfg_masks, reserved_class=reserved_classes)
+        best_acc = fine_tuning(model_after_pruning, reserved_classes,
+                               EPOCH=fine_tuning_epoch, lr=fine_tuning_lr,
+                               device=device,
+                               train_data_loader=fine_tuning_loader,
+                               test_data_loader=data_loader.test_data_loader,
+                               model_save_path=model_save_path,
+                               use_all_data=False,
+                               frozen=frozen)
 
-            # --------------------------------------------- 微调
-            model_save_path = './models/ResNet/version' + str(version_id) + '_resnet56_after_model_' + str(
-                model_id) + '.pkl'
+        print("model_id:---" + str(model_id) +
+              " best_acc:----" + str(best_acc) +
+              " reserved_classes:---" + str(reserved_classes) +
+              " manual_radio:---" + str(manual_radio) +
+              " pruned_radio:---" + str(pruned_radio) +
+              '\n')
 
-            fine_tuning_loader = get_fine_tuning_data_loader(reserved_classes,
-                                                             pics_num=fine_tuning_pics_num,
-                                                             batch_size=fine_tuning_batch_size,
-                                                             data_loader=data_loader.train_data_loader,
-                                                             use_KL=use_KL_divergence,
-                                                             divide_radio=divide_radio)
+        msg_save_path = "./model_msg3.txt"
+        # msg_save_path = "/kaggle/working/model_msg.txt"
+        with open(msg_save_path, "a") as fp:
+            # fp.write("version_id:---" + str(version_id) +
+            #          "  model_id:---" + str(model_id) +
+            #          "  best_acc:----" + str(best_acc) +
+            #          "  fine_tuning_batch_size:---" + str(fine_tuning_batch_size) +
+            #          "  fine_tuning_pics_num:---" + str(fine_tuning_pics_num) +
+            #          "  fine_tuning_epoch:---" + str(fine_tuning_epoch) +
+            #          "  fine_tuning_lr:---" + str(fine_tuning_lr) +
+            #          "  manual_radio:---" + str(manual_radio) +
+            #          "  pruned_radio:---" + str(pruned_radio) +
+            #          "  reserved_classes:---" + str(reserved_classes) +
+            #          "  model_save_path---" + model_save_path +
+            #          "\n")
+            space = " "
 
-            best_acc = fine_tuning(model_after_pruning, reserved_classes,
-                                   EPOCH=fine_tuning_epoch, lr=fine_tuning_lr,
-                                   device=device,
-                                   train_data_loader=fine_tuning_loader,
-                                   test_data_loader=data_loader.test_data_loader,
-                                   model_save_path=model_save_path,
-                                   use_all_data=False,
-                                   frozen=frozen)
+            fp.write(str(version_id) + space +
+                     str(model_id) + space +
+                     str(round(best_acc + 0.0001, 4)) + space +
+                     str(fine_tuning_batch_size) + space +
+                     str(fine_tuning_pics_num) + space +
+                     str(fine_tuning_epoch) + space +
+                     str(fine_tuning_lr) + space +
+                     str(redundancy_num) + space +
+                     str(divide_radio) + space +
+                     str(use_KL_divergence) + space +
+                     str(round(manual_radio, 3)) + space +
+                     str(round(pruned_radio, 4)) + space +
+                     str(reserved_classes) + space +
+                     version_msg + space +
+                     model_save_path + space +
+                     "\n")
 
-            print("model_id:---" + str(model_id) +
-                  " best_acc:----" + str(best_acc) +
-                  " reserved_classes:---" + str(reserved_classes) +
-                  " manual_radio:---" + str(manual_radio) +
-                  " pruned_radio:---" + str(pruned_radio) +
-                  '\n')
-
-            msg_save_path = "./model_msg3.txt"
-            with open(msg_save_path, "a") as fp:
-                # fp.write("version_id:---" + str(version_id) +
-                #          "  model_id:---" + str(model_id) +
-                #          "  best_acc:----" + str(best_acc) +
-                #          "  fine_tuning_batch_size:---" + str(fine_tuning_batch_size) +
-                #          "  fine_tuning_pics_num:---" + str(fine_tuning_pics_num) +
-                #          "  fine_tuning_epoch:---" + str(fine_tuning_epoch) +
-                #          "  fine_tuning_lr:---" + str(fine_tuning_lr) +
-                #          "  manual_radio:---" + str(manual_radio) +
-                #          "  pruned_radio:---" + str(pruned_radio) +
-                #          "  reserved_classes:---" + str(reserved_classes) +
-                #          "  model_save_path---" + model_save_path +
-                #          "\n")
-                space = " "
-                fp.write(str(version_id) + space +
-                         str(model_id) + space +
-                         str(best_acc) + space +
-                         str(fine_tuning_batch_size) + space +
-                         str(fine_tuning_pics_num) + space +
-                         str(fine_tuning_epoch) + space +
-                         str(fine_tuning_lr) + space +
-                         str(manual_radio) + space +
-                         str(pruned_radio) + space +
-                         str(reserved_classes) + space +
-                         str(use_KL_divergence) + space +
-                         str(divide_radio) + space +
-                         version_msg + space +
-                         model_save_path + space +
-                         "\n")
-
-            # --------------------------------------------- 新模型测试
-            # epoch_acc, _, _ = test_reserved_classes(model_after_pruning,
-            #                                         reserved_classes,
-            #                                         data_loader.test_data_loader,
-            #                                         data_loader.dataset_num_class,
-            #                                         device, is_print=True, test_class=True)
-
-            manual_radio += 0.04
-            model_id += 1
+        model_id += 1
