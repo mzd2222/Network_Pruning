@@ -34,7 +34,7 @@ class Data_Loader_CIFAR:
             train_data_set = datasets.CIFAR10(data_path, transform=train_transform, download=download, train=True)
             test_data_set = datasets.CIFAR10(data_path, transform=test_transform, download=download, train=False)
 
-        self.train_data_loader = dataloader.DataLoader(train_data_set, batch_size=train_batch_size, shuffle=True)
+        self.train_data_loader = dataloader.DataLoader(train_data_set, batch_size=train_batch_size, shuffle=False)
         self.test_data_loader = dataloader.DataLoader(test_data_set, batch_size=test_batch_size, shuffle=True)
 
 

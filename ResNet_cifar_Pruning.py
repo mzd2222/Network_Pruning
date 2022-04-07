@@ -32,9 +32,9 @@ def Compute_activation_scores(activations_):
         # 一阶范数
         # activations_scores.append(activation.cpu().norm(dim=(1, 2), p=1).cuda())
         # 二阶范数
-        # activations_scores.append(activation.cpu().norm(dim=(1, 2), p=2).cuda())
+        activations_scores.append(activation.cpu().norm(dim=(1, 2), p=2).cuda())
         # 秩
-        activations_scores.append(torch.linalg.matrix_rank(activation))
+        # activations_scores.append(torch.linalg.matrix_rank(activation))
     return activations_scores
 
 
@@ -142,7 +142,7 @@ def pre_processing_Pruning(model: nn.Module, masks):
 
             mask = masks[count]
             # 前两层不剪枝
-            if count <= 1:
+            if count <= 2:
                 mask = mask | True
 
             # mask中0对应位置置0
@@ -337,8 +337,8 @@ if __name__ == '__main__':
     fine_tuning_epoch = 80
     manual_radio = 0.5625
 
-    fine_tuning_lr = 0.001
-    fine_tuning_batch_size = 1024
+    fine_tuning_lr = 0.005
+    fine_tuning_batch_size = 128
     fine_tuning_pics_num = 1024
 
     use_KL_divergence = False
@@ -361,11 +361,11 @@ if __name__ == '__main__':
     # for reserved_classes in reserved_classes_list:
     # redundancy_num_list = [128, 256, 512, 1024]
     # fine_tuning_epoch_list = [30, 40, 50, 60, 70, 80, 90, 100]
-    fine_tuning_epoch_list = [50, 60, 70, 80, 90, 100]
+    fine_tuning_epoch_list = [80]
     for fine_tuning_epoch in fine_tuning_epoch_list:
 
         imgs = read_Img_by_class(target_class=reserved_classes, pics_num=128,
-                                 data_loader=data_loader.test_data_loader, device=device)
+                                 data_loader=data_loader.train_data_loader, device=device)
 
         layer_masks = Compute_layer_mask(imgs=imgs, model=model, percent=manual_radio, device=device)
         # --------------------------------------------- 预剪枝,计算mask
