@@ -9,6 +9,8 @@ from torch.nn import functional as F
 from torch.utils.data import Dataset, dataloader
 from torchvision import datasets, transforms
 
+from utils.Channel_selection import channel_selection
+
 
 def read_Img_by_class(target_class, pics_num, data_loader, device):
     """
@@ -200,27 +202,25 @@ def fine_tuning(model, reserved_classes, EPOCH, lr, model_save_path,
                 train_data_loader, test_data_loader, device,
                 use_all_data=True, frozen=False):
 
-    model.to(device)
-
-    if frozen:
-        for param in model.parameters():
-            param.requires_grad = False
-
-        conv_count = 10
-        conv_idx = 0
-
-        for module in model.modules():
-            if isinstance(module, nn.Linear):
-                module.weight.requires_grad = True
-                module.bias.requires_grad = True
-            if isinstance(module, nn.Conv2d):
-                module.weight.requires_grad = True
-                # module.bias.requires_grad = True
-
+    # if frozen:
+    #     for param in model.parameters():
+    #         param.requires_grad = False
+    #
+    #     conv_count = 10
+    #     conv_idx = 0
+    #
+    #     for module in model.modules():
+    #         if isinstance(module, nn.Linear):
+    #             module.weight.requires_grad = True
+    #             module.bias.requires_grad = True
+    #         if isinstance(module, nn.Conv2d):
+    #             module.weight.requires_grad = True
+    #             # module.bias.requires_grad = True
 
 
     loss_func = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(params=model.parameters(), lr=lr, weight_decay=5e-4, momentum=0.9)
+    # optimizer = optim.SGD(params=model.parameters(), lr=lr, weight_decay=5e-4, momentum=0.9)
+    optimizer = optim.AdamW(params=model.parameters(), lr=lr, weight_decay=1e-2)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCH)
 
     optimizer.zero_grad()
@@ -234,8 +234,8 @@ def fine_tuning(model, reserved_classes, EPOCH, lr, model_save_path,
         item_times = 0
 
         for idx, (data, label) in enumerate(tqdm(train_data_loader, desc='fine_tuning: ', file=sys.stdout)):
-            data = data.cuda()
-            label = label.cuda()
+            data = data.to(device)
+            label = label.to(device)
 
             if use_all_data:
                 masks = torch.full([len(label)], False)
@@ -304,7 +304,7 @@ class myDataset(Dataset):
 
 
 def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_size,
-                                use_KL=False, divide_radio=4, redundancy_num=50):
+                                use_KL=False, divide_radio=4, redundancy_num=50, use_norm=False):
     """
 
     :param reserved_classes: 读取类的标签 eg: [0, 1, 2, 3]
@@ -351,9 +351,7 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
 
                 # 使用kl-divergence 且图片还未满
                 if use_KL:
-
-                    dim = 1
-
+                    dim = 0
                     # 如果是第一张图片 则将其Kc值置为1
                     if counts[list_idx] == 0:
                         image_Kc_list[list_idx][0] = 1
@@ -364,8 +362,15 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
                         if counts[list_idx] < pics_num / divide_radio:
                             KL_all = 0
                             for image_ in img_list[list_idx]:
-                                KL_all += F.kl_div(data[idx].softmax(dim=dim).log(), image_.softmax(dim=dim),
-                                                   reduction='mean')
+                                if not use_norm:
+                                    KL_all += F.kl_div(data[idx].softmax(dim=dim).log(), image_.softmax(dim=dim),
+                                                       reduction='batchmean')
+                                else:
+                                    data1 = data[idx].norm(dim=(1, 2), p=2)
+                                    data2 = image_.norm(dim=(1, 2), p=2)
+                                    KL_all += F.kl_div(data1.softmax(dim=0).log(), data2.softmax(dim=0),
+                                                       reduction='batchmean')
+
                                 # x_down = F.adaptive_avg_pool2d(x[idx_], 1).squeeze()
                                 # KL_all +=
                             Kc = KL_all / counts[list_idx]
@@ -378,9 +383,15 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
 
                             for random_i in sample:
                                 # data[idx]当前图片 img_list[list_idx][random_i]已存图片随机选择一张
-                                KL_all += F.kl_div(data[idx].softmax(dim=dim).log(),
-                                                   img_list[list_idx][random_i].softmax(dim=dim),
-                                                   reduction='mean')
+                                if not use_norm:
+                                    KL_all += F.kl_div(data[idx].softmax(dim=dim).log(),
+                                                       img_list[list_idx][random_i].softmax(dim=dim),
+                                                       reduction='batchmean')
+                                else:
+                                    data1 = data[idx].norm(dim=(1, 2), p=2)
+                                    data2 = img_list[list_idx][random_i].norm(dim=(1, 2), p=2)
+                                    KL_all += F.kl_div(data1.softmax(dim=0).log(), data2.softmax(dim=0),
+                                                       reduction='batchmean')
                             Kc = KL_all / len(sample)
 
                         # 储存当前图片的Kc值
@@ -404,9 +415,15 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
 
                 for random_i in sample:
                     # x[idx_]当前图片 image_data_list[list_idx][random_i]已存图片随机选择一张
-                    KL_all += F.kl_div(data[idx].softmax(dim=dim).log(),
-                                       img_list[list_idx][random_i].softmax(dim=dim),
-                                       reduction='mean')
+                    if not use_norm:
+                        KL_all += F.kl_div(data[idx].softmax(dim=dim).log(),
+                                           img_list[list_idx][random_i].softmax(dim=dim),
+                                           reduction='batchmean')
+                    else:
+                        data1 = data[idx].norm(dim=(1, 2), p=2)
+                        data2 = img_list[list_idx][random_i].norm(dim=(1, 2), p=2)
+                        KL_all += F.kl_div(data1.softmax(dim=0).log(), data2.softmax(dim=0),
+                                           reduction='batchmean')
 
                 Kc = KL_all / len(sample)
 
@@ -414,7 +431,9 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
                     image_Kc_list[list_idx][Kc_min_idx] = Kc
                     img_list[list_idx][Kc_min_idx] = data[idx]
                     label_list[list_idx][Kc_min_idx] = label[idx]
-                    redundancy_counts[list_idx] += 1
+
+
+                redundancy_counts[list_idx] += 1
 
     imgs = []
     labels = []

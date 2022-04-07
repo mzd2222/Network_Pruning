@@ -12,6 +12,7 @@ class channel_selection(nn.Module):
         """
         super(channel_selection, self).__init__()
         self.indexes = nn.Parameter(torch.ones(num_channels))
+        self.indexes.requires_grad = False
 
     def forward(self, input_tensor):
         """

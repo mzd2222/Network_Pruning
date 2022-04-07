@@ -32,7 +32,9 @@ def Compute_activation_scores(activations_):
         # 一阶范数
         # activations_scores.append(activation.cpu().norm(dim=(1, 2), p=1).cuda())
         # 二阶范数
-        activations_scores.append(activation.cpu().norm(dim=(1, 2), p=2).cuda())
+        # activations_scores.append(activation.cpu().norm(dim=(1, 2), p=2).cuda())
+        # 秩
+        activations_scores.append(torch.linalg.matrix_rank(activation))
     return activations_scores
 
 
@@ -299,6 +301,8 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_loader = Data_Loader_CIFAR(train_batch_size=512, test_batch_size=1024, dataSet=dataSet_name)
 
+
+
     # model = resnet56(num_classes=data_loader.dataset_num_class).to(device)
     # model = torch.load(f='./models/ResNet/resnet32_before_9393.pkl').to(device)
     model = torch.load(f='./models/ResNet/resnet56_before_9423.pkl').to(device)
@@ -327,14 +331,14 @@ if __name__ == '__main__':
 
     reserved_classes_list = [[0, 1, 2, 3, 4]]
 
-    version_id = 2  # 指定
+    version_id = 3  # 指定
     model_id = 0    # 保存模型的id
 
     fine_tuning_epoch = 80
-    manual_radio = 0.562
+    manual_radio = 0.5625
 
-    fine_tuning_lr = 0.01
-    fine_tuning_batch_size = 512
+    fine_tuning_lr = 0.001
+    fine_tuning_batch_size = 1024
     fine_tuning_pics_num = 1024
 
     use_KL_divergence = False
@@ -353,16 +357,19 @@ if __name__ == '__main__':
     # --------------
     # ----------------------------------------------------------------------
 
-    imgs = read_Img_by_class(target_class=reserved_classes, pics_num=100,
-                             data_loader=data_loader.test_data_loader, device=device)
-    layer_masks = Compute_layer_mask(imgs=imgs, model=model, percent=manual_radio, device=device)
-    # --------------------------------------------- 预剪枝,计算mask
-    cfg, cfg_masks, pruned_radio = pre_processing_Pruning(model, layer_masks)
 
     # for reserved_classes in reserved_classes_list:
     # redundancy_num_list = [128, 256, 512, 1024]
-    fine_tuning_epoch_list = [30, 40, 50, 60, 70, 80, 90, 100]
+    # fine_tuning_epoch_list = [30, 40, 50, 60, 70, 80, 90, 100]
+    fine_tuning_epoch_list = [50, 60, 70, 80, 90, 100]
     for fine_tuning_epoch in fine_tuning_epoch_list:
+
+        imgs = read_Img_by_class(target_class=reserved_classes, pics_num=128,
+                                 data_loader=data_loader.test_data_loader, device=device)
+
+        layer_masks = Compute_layer_mask(imgs=imgs, model=model, percent=manual_radio, device=device)
+        # --------------------------------------------- 预剪枝,计算mask
+        cfg, cfg_masks, pruned_radio = pre_processing_Pruning(model, layer_masks)
 
         new_model = resnet56(data_loader.dataset_num_class, cfg=cfg).to(device)
         # --------------------------------------------- 正式剪枝,参数拷贝
@@ -370,6 +377,11 @@ if __name__ == '__main__':
                                            cfg_masks=cfg_masks, reserved_class=reserved_classes)
         print("model_id: " + str(model_id) + "  运行：")
 
+        if torch.cuda.device_count() > 1:
+            print("Let's use", torch.cuda.device_count(), "GPUs!")
+            model_after_pruning = nn.DataParallel(model_after_pruning)
+
+        model_after_pruning.to(device)
         # --------------------------------------------- 微调
         # model_save_path = '/kaggle/working/version'
         model_save_path = './models/ResNet/version'
