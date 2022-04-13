@@ -347,15 +347,15 @@ if __name__ == '__main__':
 
     reserved_classes_list = [[0, 1, 2, 3, 4]]
 
-    version_id = 3  # 指定
+    version_id = 5  # 指定
     model_id = 0  # 保存模型的id
 
     fine_tuning_epoch = 50
     manual_radio = 0.74
 
     fine_tuning_lr = 0.001
-    fine_tuning_batch_size = 16
-    fine_tuning_pics_num = 16
+    fine_tuning_batch_size = 128
+    fine_tuning_pics_num = 32
 
     use_KL_divergence = True
     divide_radio = 1
@@ -364,9 +364,15 @@ if __name__ == '__main__':
 
     frozen = False
 
-    version_msg = "版本备注:无"
+    version_msg = "版本备注:使用max"
     # version_msg = "版本备注:train的时候用eval训练,保持bn层数据不变"
     # version_msg = "版本备注:冻结除bn和fc的其他层,bn层冻结"
+
+    msg_save_path = "./msg/model_msg4.txt"
+    model_save_path = './models/ResNet/version'
+    # msg_save_path = "/kaggle/working/model_msg.txt"
+    # model_save_path = '/kaggle/working/version'
+    model_save_path += str(version_id) + '_resnet56_after_model_' + str(model_id) + '.pkl'
 
     reserved_classes = [0, 1, 2, 3, 4]
     # reserved_classes = [1, 3, 4, 9]
@@ -382,7 +388,7 @@ if __name__ == '__main__':
     cfg, cfg_masks, pruned_radio = pre_processing_Pruning(model, layer_masks)
 
     # for reserved_classes in reserved_classes_list:
-    redundancy_num_list = [0, 2, 4, 8, 16, 32, 64, 128, 256]
+    redundancy_num_list = [0, 4, 8, 16, 32, 64, 128, 256]
     # fine_tuning_epoch_list = [20, 50, 80]
     # fine_tuning_pics_num_list = [256, 512, 1024]
     for redundancy_num in redundancy_num_list:
@@ -402,11 +408,6 @@ if __name__ == '__main__':
         model_after_pruning.to(device)
 
         # --------------------------------------------- 微调
-        # model_save_path = '/kaggle/working/version'
-        model_save_path = './models/ResNet/version'
-
-        model_save_path += str(version_id) + '_resnet56_after_model_' + str(model_id) + '.pkl'
-
         fine_tuning_loader = get_fine_tuning_data_loader(reserved_classes,
                                                          pics_num=fine_tuning_pics_num,
                                                          batch_size=fine_tuning_batch_size,
@@ -432,8 +433,6 @@ if __name__ == '__main__':
               " pruned_radio:---" + str(pruned_radio) +
               '\n')
 
-        msg_save_path = "./msg/model_msg4.txt"
-        # msg_save_path = "/kaggle/working/model_msg.txt"
         with open(msg_save_path, "a") as fp:
             # fp.write("version_id:---" + str(version_id) +
             #          "  model_id:---" + str(model_id) +
@@ -467,3 +466,6 @@ if __name__ == '__main__':
                      "\n")
 
         model_id += 1
+
+    with open(msg_save_path, "a") as fp:
+        fp.write("\n")
