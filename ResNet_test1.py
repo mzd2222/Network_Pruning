@@ -10,7 +10,6 @@
 4.经过反复的调试，终于将第一种方法改对了。。
   对比了两种方法获得的每层bn层的特征值并进行了相减，结果表明两种方法获得bn值相同，且最后输出结果也相同
 5.后面进一步采用对每一个bn层添加一个hook的方法，更简单快捷。
-
 """
 
 
@@ -24,7 +23,7 @@ from torchsummary import summary
 from torchvision import datasets
 from torchvision import transforms
 from torch.utils.data import dataloader
-from Channel_selection import channel_selection
+from utils.Channel_selection import channel_selection
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -233,9 +232,8 @@ class ResNet(nn.Module):
         out = self.layer4(out)
 
         out = self.bn1(out)
-        out1 = self.select(out)
-        out1 = self.relu(out1)
-        out = F.relu(out1)
+        out = self.select(out)
+        out = self.relu(out)
 
         out = self.avgpool(out)
         # out = self.bn3(out)
@@ -342,50 +340,48 @@ def read_Img_by_class(target_class, pics_num):
 
     return imgs
 
-
+input_activation = []
 def acvition_hook_test(model, input, output):
-    activations2.append(output.clone().detach().sum(dim=0))
+    global activations2, input_activation
+    input_activation = list(input[0].clone().detach())
+    activations2 = list(output.clone().detach())
     return
 
 
 def get_mask(imgs, model):
+    global activations2
 
-    list_activation1 = []
     list_activation2 = []
+    list_input_activation = []
 
-    imgs_masks = []
-    thresholds = []
     one_img_mask = []
     hooks = []
+    output_list = []
 
-    for img in imgs:
-        thresholds.clear()
-        activations1.clear()
-        activations2.clear()
-        one_img_mask.clear()
-        hooks.clear()
+    for name, module in model.named_modules():
+        if isinstance(module, nn.BatchNorm2d):
+            hook = module.register_forward_hook(acvition_hook_test)
+            hooks.append(hook)
 
-        img = torch.unsqueeze(img, 0)
+    output = model(imgs)
 
-        for name, module in model.named_modules():
-            if isinstance(module, nn.BatchNorm2d):
-                hook = module.register_forward_hook(acvition_hook_test)
-                hooks.append(hook)
+    # for img in imgs:
+    #     input_activation.clear()
+    #     activations2.clear()
+    #     one_img_mask.clear()
+    #
+    #     img = torch.unsqueeze(img, 0)
+    #
+    #     output = model(img)
+    #
+    #     output_list.append(output)
+    #     list_activation2.append(activations2)
+    #     list_input_activation.append(input_activation)
 
-        output = model(img)
-        output_test2.append(output)
-        for hook in hooks:
-            hook.remove()
+    for hook in hooks:
+        hook.remove()
 
-        hook_model = model.register_forward_hook(model.activation_hook)
-        output = model(img)
-        output_test3.append(output)
-        hook_model.remove()
-
-        list_activation1.append(activations1)
-        list_activation2.append(activations2)
-
-    return list_activation1, list_activation2
+    return list_activation2
 
 
 def resnet18(num_classes=1000):
@@ -405,7 +401,7 @@ def resnet101(num_classes=1000):
 
 
 model = resnet50(num_classes=10).to(device)
-
+model.eval()
 # num = 0
 # for name, module in model.named_modules():
 #     print(name)
@@ -416,8 +412,8 @@ model = resnet50(num_classes=10).to(device)
 # exit(0)
 
 
-classes = [0]
-imgs = read_Img_by_class(target_class=classes, pics_num=1)
+classes = [0, 1, 2]
+imgs = read_Img_by_class(target_class=classes, pics_num=10)
 # print(imgs.size())
 
 ac1, ac2 = get_mask(imgs=imgs, model=model)

@@ -52,3 +52,10 @@
 3 0 0.7609 512 1024 30 0.001 1024 4 False 0.562 0.5855 [0, 1, 2, 3, 4] 版本备注:无 ./models/ResNet/version3_resnet56_after_model_0.pkl 
 3 1 0.7341 512 1024 40 0.001 1024 4 False 0.562 0.5857 [0, 1, 2, 3, 4] 版本备注:无 ./models/ResNet/version3_resnet56_after_model_1.pkl 
 3 0 0.8073 256 1024 50 0.003 1024 4 False 0.562 0.583 [0, 1, 2, 3, 4] 版本备注:无 ./models/ResNet/version3_resnet56_after_model_0.pkl 
+3 0 0.7787 128 1024 80 0.005 1024 4 False 0.562 0.5835 [0, 1, 2, 3, 4] 版本备注:无 ./models/ResNet/version3_resnet56_after_model_0.pkl 
+4 0 0.7903 512 2048 40 0.01 1024 4 False 0.562 0.5835 [0, 1, 2, 3, 4] 版本备注:无 ./models/ResNet/version4_resnet56_after_model_0.pkl 
+4 1 0.7925 512 2048 50 0.01 1024 4 False 0.562 0.5835 [0, 1, 2, 3, 4] 版本备注:无 ./models/ResNet/version4_resnet56_after_model_1.pkl 
+4 2 0.7917 512 2048 60 0.01 1024 4 False 0.562 0.5835 [0, 1, 2, 3, 4] 版本备注:无 ./models/ResNet/version4_resnet56_after_model_2.pkl 
+4 3 0.8023 512 2048 70 0.01 1024 4 False 0.562 0.5835 [0, 1, 2, 3, 4] 版本备注:无 ./models/ResNet/version4_resnet56_after_model_3.pkl 
+4 4 0.8057 512 2048 80 0.01 1024 4 False 0.562 0.5835 [0, 1, 2, 3, 4] 版本备注:无 ./models/ResNet/version4_resnet56_after_model_4.pkl 
+4 5 0.8015 512 2048 90 0.01 1024 4 False 0.562 0.5835 [0, 1, 2, 3, 4] 版本备注:无 ./models/ResNet/version4_resnet56_after_model_5.pkl 

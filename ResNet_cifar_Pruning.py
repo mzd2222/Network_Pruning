@@ -1,4 +1,5 @@
 import torch
+import random
 import numpy as np
 import torch.nn as nn
 import torch.optim as optim
@@ -15,7 +16,8 @@ activations = []
 
 
 def acvition_hook(model, input, output):
-    activations.append(output.clone().detach().sum(dim=0))
+    global activations
+    activations.append(output.clone().detach())
     return
 
 
@@ -27,12 +29,12 @@ def Compute_activation_scores(activations_):
     """
     activations_scores = []
     for activation in activations_:
-        # activation = F.leaky_relu(activation)
+        activation = F.leaky_relu(activation)
         # activation = F.relu(activation)
         # 一阶范数
-        # activations_scores.append(activation.cpu().norm(dim=(1, 2), p=1).cuda())
+        # activations_scores.append(activation.norm(dim=(1, 2), p=1))
         # 二阶范数
-        activations_scores.append(activation.cpu().norm(dim=(1, 2), p=2).cuda())
+        activations_scores.append(activation.norm(dim=(1, 2), p=2))
         # 秩
         # activations_scores.append(torch.linalg.matrix_rank(activation))
     return activations_scores
@@ -71,35 +73,44 @@ def Compute_layer_mask(imgs, model, percent, device):
     :return: masks 维度为 [layer_num, c]
     """
 
+    global activations
     # 此处需要把模型更改为eval状态，否则在计算layer_mask时输入的数据会改变bn层参数，导致正确率下降
     model.eval()
+
     with torch.no_grad():
         imgs_masks = []
-        one_img_mask = []
         hooks = []
+        activations_list = []
+        activations.clear()
 
-        for img in imgs:
-            activations.clear()
-            one_img_mask.clear()
-            hooks.clear()
+        for module in model.modules():
+            if isinstance(module, nn.BatchNorm2d):
+                hook = module.register_forward_hook(acvition_hook)
+                hooks.append(hook)
 
-            img = torch.unsqueeze(img, 0)
+        _ = model(imgs)
 
-            for module in model.modules():
-                if isinstance(module, nn.BatchNorm2d):
-                    hook = module.register_forward_hook(acvition_hook)
-                    hooks.append(hook)
+        for hook in hooks:
+            hook.remove()
 
-            _ = model(img)
+        # TODO: 优化一下实现
+        # 原本activations结构为[layer_num, pics_num, c, h, w] 转换为 [pics_num, layer_num, c, h, w]
+        # 外层对pics_num图片循环，内层对layer_num循环
+        for pics_idx in range(len(activations[0])):
+            one_img_activation = []
+            for layer_msg in activations:
+                one_img_activation.append(layer_msg[pics_idx])
+            activations_list.append(one_img_activation)
+        # 清空不使用的列表
+        activations.clear()
 
-            for hook in hooks:
-                hook.remove()
-
+        for activations_ in activations_list:
             # 计算每个通道评价标准(重要性) [layer_num, c, h, w] => [layer_num, c]
-            activations_scores = Compute_activation_scores(activations)
+            activations_scores = Compute_activation_scores(activations_)
             # 计算阈值thresholds [layer_num, c] => [layer_num, 1]
             thresholds = Compute_activation_thresholds(activations_scores, percent)
 
+            one_img_mask = []
             # 计算掩码 mask []
             for i in range(len(thresholds)):
                 # [c]
@@ -108,6 +119,11 @@ def Compute_layer_mask(imgs, model, percent, device):
                 one_img_mask.append(layer_mask)
 
             imgs_masks.append(one_img_mask)
+
+        # 清空不使用的列表
+        activations_list.clear()
+        activations_scores.clear()
+        thresholds.clear()
 
         # 合并 [image_num, layer_num, c] => [layer_num, c]
         img_num = len(imgs_masks)
@@ -121,17 +137,19 @@ def Compute_layer_mask(imgs, model, percent, device):
         return masks
 
 
-def pre_processing_Pruning(model: nn.Module, masks):
+def pre_processing_Pruning(model: nn.Module, masks, jump_layers=2):
     """
+
     :argument: 根据输入的mask，计算生成新模型所需的cfg，以及对应的新的layer_mask
               （和原本mask比其实知识把前两层全部置为1，前两层不剪枝）
     :param model:输入的预剪枝模型
     :param masks:剪枝用到的mask
+    :param jump_layers: 剪枝跳过几层
     :return:
     """
     model.eval()
-    cfg = []  # 新的网络机构参数
-    count = 0  # 层计数
+    cfg = []  # 新的网络结构参数
+    count = 0  # bn层计数
     cfg_mask = []  # 计算新的mask
     pruned = 0  # 计算剪掉的通道数
     total = 0  # 总通道数
@@ -142,7 +160,7 @@ def pre_processing_Pruning(model: nn.Module, masks):
 
             mask = masks[count]
             # 前两层不剪枝
-            if count <= 2:
+            if count <= jump_layers:
                 mask = mask | True
 
             # mask中0对应位置置0
@@ -164,9 +182,9 @@ def pre_processing_Pruning(model: nn.Module, masks):
             # 总数减去保留的数量=剪掉的通道数
             pruned += len(mask) - torch.sum(mask)
 
-            pruned_ratio = pruned / total
-
             count += 1
+
+    pruned_ratio = pruned / total
 
     return cfg, cfg_mask, pruned_ratio.detach().item()
 
@@ -214,7 +232,7 @@ def Real_Pruning(old_model: nn.Module, new_model: nn.Module, cfg_masks, reserved
                 new_module.running_var = old_module.running_var.clone()
 
                 # 调整cs层index
-                new_modules_list[idx + 1][1].indexes.data = current_mask
+                new_modules_list[idx + 1][1].indexes.data = current_mask.clone()
 
             # 下一层不是cs，则对bn层剪枝
             else:
@@ -252,7 +270,7 @@ def Real_Pruning(old_model: nn.Module, new_model: nn.Module, cfg_masks, reserved
                     # 输出对齐
                     conv_weight = conv_weight[next_mask, :, :, :]
 
-                new_module.weight.data = conv_weight
+                new_module.weight.data = conv_weight.clone()
 
                 # print(conv_weight.size())
                 # print(new_module.weight.data.size())
@@ -279,7 +297,7 @@ def Real_Pruning(old_model: nn.Module, new_model: nn.Module, cfg_masks, reserved
             # 改变输出size
             fc_data = fc_data[out_mask, :]
 
-            new_model.fc.weight.data = fc_data
+            new_model.fc.weight.data = fc_data.clone()
             new_model.fc.bias.data = old_module.bias.data.clone()[out_mask]
 
     # test
@@ -297,16 +315,18 @@ if __name__ == '__main__':
 
     torch.manual_seed(1)
     np.random.seed(1)
+    random.seed(1)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    data_loader = Data_Loader_CIFAR(train_batch_size=512, test_batch_size=1024, dataSet=dataSet_name)
-
-
+    data_loader = Data_Loader_CIFAR(train_batch_size=512, test_batch_size=1024,
+                                    dataSet=dataSet_name, use_data_Augmentation=False,
+                                    download=False, train_shuffle=True)
 
     # model = resnet56(num_classes=data_loader.dataset_num_class).to(device)
     # model = torch.load(f='./models/ResNet/resnet32_before_9393.pkl').to(device)
     model = torch.load(f='./models/ResNet/resnet56_before_9423.pkl').to(device)
     # model = torch.load(f='../input/resnet-pruning-cifar-code/models/ResNet/resnet56_before_9423.pkl').to(device)
+    model.eval()
 
     # --------------------------------------------- 剪枝前模型测试
     # epoch_acc, epoch_class_correct, epoch_class_acc = all_test(model, data_loader.test_data_loader,
@@ -314,10 +334,6 @@ if __name__ == '__main__':
     #                                                            finnal_test=True)
     # print('\n', '1each class corrects: ', epoch_class_correct, '\n',
     #       '1each class accuracy: ', epoch_class_acc, '\n', '1total accuracy: ', epoch_acc)
-
-    # --------------------------------------------- 预剪枝
-    # 此处需要把模型更改为eval状态，否则在计算layer_mask时输入的数据会改变bn层参数，导致原模型正确率下降
-    model.eval()
 
     reserved_classes_list = [[2, 4],
                              [2, 4, 7],
@@ -332,18 +348,19 @@ if __name__ == '__main__':
     reserved_classes_list = [[0, 1, 2, 3, 4]]
 
     version_id = 3  # 指定
-    model_id = 0    # 保存模型的id
+    model_id = 0  # 保存模型的id
 
-    fine_tuning_epoch = 80
-    manual_radio = 0.5625
+    fine_tuning_epoch = 50
+    manual_radio = 0.74
 
-    fine_tuning_lr = 0.005
-    fine_tuning_batch_size = 128
-    fine_tuning_pics_num = 1024
+    fine_tuning_lr = 0.001
+    fine_tuning_batch_size = 16
+    fine_tuning_pics_num = 16
 
-    use_KL_divergence = False
-    divide_radio = 4
-    redundancy_num = 1024
+    use_KL_divergence = True
+    divide_radio = 1
+    redundancy_num = 128
+    use_norm = True
 
     frozen = False
 
@@ -352,36 +369,38 @@ if __name__ == '__main__':
     # version_msg = "版本备注:冻结除bn和fc的其他层,bn层冻结"
 
     reserved_classes = [0, 1, 2, 3, 4]
+    # reserved_classes = [1, 3, 4, 9]
 
     # ----------------------------------------------------------------------
     # --------------
     # ----------------------------------------------------------------------
 
+    imgs = read_Img_by_class(target_class=reserved_classes, pics_num=10,
+                             data_loader=data_loader.train_data_loader, device=device)
+    layer_masks = Compute_layer_mask(imgs=imgs, model=model, percent=manual_radio, device=device)
+    # --------------------------------------------- 预剪枝,计算mask
+    cfg, cfg_masks, pruned_radio = pre_processing_Pruning(model, layer_masks)
 
     # for reserved_classes in reserved_classes_list:
-    # redundancy_num_list = [128, 256, 512, 1024]
-    # fine_tuning_epoch_list = [30, 40, 50, 60, 70, 80, 90, 100]
-    fine_tuning_epoch_list = [80]
-    for fine_tuning_epoch in fine_tuning_epoch_list:
-
-        imgs = read_Img_by_class(target_class=reserved_classes, pics_num=128,
-                                 data_loader=data_loader.train_data_loader, device=device)
-
-        layer_masks = Compute_layer_mask(imgs=imgs, model=model, percent=manual_radio, device=device)
-        # --------------------------------------------- 预剪枝,计算mask
-        cfg, cfg_masks, pruned_radio = pre_processing_Pruning(model, layer_masks)
+    redundancy_num_list = [0, 2, 4, 8, 16, 32, 64, 128, 256]
+    # fine_tuning_epoch_list = [20, 50, 80]
+    # fine_tuning_pics_num_list = [256, 512, 1024]
+    for redundancy_num in redundancy_num_list:
 
         new_model = resnet56(data_loader.dataset_num_class, cfg=cfg).to(device)
+
         # --------------------------------------------- 正式剪枝,参数拷贝
         model_after_pruning = Real_Pruning(old_model=model, new_model=new_model,
                                            cfg_masks=cfg_masks, reserved_class=reserved_classes)
-        print("model_id: " + str(model_id) + "  运行：")
 
+        print("model_id:" + str(model_id) + " ---pruned_radio: " + str(pruned_radio) + "  运行：")
+
+        # 多GPU微调
         if torch.cuda.device_count() > 1:
             print("Let's use", torch.cuda.device_count(), "GPUs!")
             model_after_pruning = nn.DataParallel(model_after_pruning)
-
         model_after_pruning.to(device)
+
         # --------------------------------------------- 微调
         # model_save_path = '/kaggle/working/version'
         model_save_path = './models/ResNet/version'
@@ -394,7 +413,8 @@ if __name__ == '__main__':
                                                          data_loader=data_loader.train_data_loader,
                                                          use_KL=use_KL_divergence,
                                                          redundancy_num=redundancy_num,
-                                                         divide_radio=divide_radio)
+                                                         divide_radio=divide_radio,
+                                                         use_norm=use_norm)
 
         best_acc = fine_tuning(model_after_pruning, reserved_classes,
                                EPOCH=fine_tuning_epoch, lr=fine_tuning_lr,
@@ -412,7 +432,7 @@ if __name__ == '__main__':
               " pruned_radio:---" + str(pruned_radio) +
               '\n')
 
-        msg_save_path = "./model_msg3.txt"
+        msg_save_path = "./msg/model_msg4.txt"
         # msg_save_path = "/kaggle/working/model_msg.txt"
         with open(msg_save_path, "a") as fp:
             # fp.write("version_id:---" + str(version_id) +
@@ -439,7 +459,7 @@ if __name__ == '__main__':
                      str(redundancy_num) + space +
                      str(divide_radio) + space +
                      str(use_KL_divergence) + space +
-                     str(round(manual_radio, 3)) + space +
+                     str(round(manual_radio, 4)) + space +
                      str(round(pruned_radio, 4)) + space +
                      str(reserved_classes) + space +
                      version_msg + space +

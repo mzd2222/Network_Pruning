@@ -11,6 +11,7 @@ from torchvision import datasets, transforms
 
 from utils.Channel_selection import channel_selection
 
+import matplotlib.pyplot as plt
 
 def read_Img_by_class(target_class, pics_num, data_loader, device):
     """
@@ -46,96 +47,25 @@ def read_Img_by_class(target_class, pics_num, data_loader, device):
     return imgs
 
 
-# 测试数量太多会爆显存 丢掉
-# def test_reserved_classes(model, reserved_classes, data_loder, num_imgs, num_classes, device,
-#                           images_data=None, images_label=None, is_print=True):
-#     model.to(device)
-#     model.eval()
-#     test_batch_size = 128
-#
-#     if images_data is None or images_label is None:
-#
-#         test_images_data = []
-#         test_images_label = []
-#         classes_counts = []
-#         for _ in range(num_classes):
-#             classes_counts.append(0)
-#             test_images_label.append([])
-#             test_images_data.append([])
-#
-#         for x, label in data_loder:
-#
-#             for idx_ in range(len(x)):
-#
-#                 class_idx = label[idx_]
-#
-#                 if class_idx in reserved_classes and classes_counts[class_idx] < num_imgs:
-#                     test_images_data[class_idx].append(x[idx_])
-#                     test_images_label[class_idx].append(label[idx_])
-#                     classes_counts[class_idx] += 1
-#
-#         images_data = torch.empty([num_imgs * len(reserved_classes), 3, 32, 32])
-#         images_label = torch.empty([num_imgs * len(reserved_classes)], dtype=torch.long)
-#
-#         idx = 0
-#         for class_x, class_y in zip(test_images_data, test_images_label):
-#             for x, y in zip(class_x, class_y):
-#                 images_data[idx] = x
-#                 images_label[idx] = y
-#                 idx += 1
-#
-#
-#     images_data, images_label = images_data.to(device), images_label.to(device)
-#
-#     correct_list = []
-#     accuracy_list = []
-#
-#     for _ in range(num_classes):
-#         correct_list.append(0)
-#         accuracy_list.append(0)
-#
-#     # 拆开进行运算，防止超过现存
-#     out = None
-#     if len(images_data > test_batch_size):
-#         for i in range(int(len(images_data)/test_batch_size) + 1):
-#             batch_data = images_data[test_batch_size*i: min(test_batch_size*(i+1), len(images_data))]
-#             print(batch_data.size())
-#             batch_out = model(batch_data)
-#
-#             out = torch.cat([out, batch_out], dim=0) if out is not None else batch_out
-#     else:
-#         out = model(images_data)
-#
-#     out = torch.argmax(out, dim=1)
-#
-#     for i, label in zip(out, images_label):
-#         if reserved_classes[int(i.item())] == label:
-#             correct_list[label] += 1
-#
-#     for i in range(num_classes):
-#         accuracy_list[i] = correct_list[i] / num_imgs
-#
-#     accuracy_all = 0
-#     for i in accuracy_list:
-#         accuracy_all += i
-#     all_acc = accuracy_all / len(reserved_classes)
-#     if is_print:
-#         print(correct_list)
-#         print(accuracy_list)
-#         print(all_acc)
-#
-#     return images_data, images_label, all_acc
-
-
 def test_reserved_classes(model, reserved_classes, test_data_loader,
                           device, is_print=True, test_class=True):
+    """
+
+    :param model:
+    :param reserved_classes:
+    :param test_data_loader:
+    :param device:
+    :param is_print:   是否输出
+    :param test_class: 是否测试每个类
+    :return:
+    """
+
     model.to(device)
     model.eval()
 
     # 计算有多少类别
     dataset_num_class = max(test_data_loader.dataset.targets) + 1
 
-    correct = 0
     if test_class:
         class_correct = []
         class_num = []
@@ -144,6 +74,7 @@ def test_reserved_classes(model, reserved_classes, test_data_loader,
             class_num.append(0)
 
     with torch.no_grad():
+        correct = 0
         num_data_all = 0
         for data, label in test_data_loader:
             input = data.to(device)
@@ -202,6 +133,7 @@ def fine_tuning(model, reserved_classes, EPOCH, lr, model_save_path,
                 train_data_loader, test_data_loader, device,
                 use_all_data=True, frozen=False):
 
+    # TODO: 冻结一部分？
     # if frozen:
     #     for param in model.parameters():
     #         param.requires_grad = False
@@ -219,8 +151,8 @@ def fine_tuning(model, reserved_classes, EPOCH, lr, model_save_path,
 
 
     loss_func = nn.CrossEntropyLoss()
-    # optimizer = optim.SGD(params=model.parameters(), lr=lr, weight_decay=5e-4, momentum=0.9)
-    optimizer = optim.AdamW(params=model.parameters(), lr=lr, weight_decay=1e-2)
+    optimizer = optim.SGD(params=model.parameters(), lr=lr, weight_decay=5e-4, momentum=0.9)
+    # optimizer = optim.AdamW(params=model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCH)
 
     optimizer.zero_grad()
@@ -229,7 +161,7 @@ def fine_tuning(model, reserved_classes, EPOCH, lr, model_save_path,
 
     for epoch in range(EPOCH):
         model.train()
-        # model.eval()
+
         epoch_loss = 0
         item_times = 0
 
@@ -248,7 +180,7 @@ def fine_tuning(model, reserved_classes, EPOCH, lr, model_save_path,
                 label = label[masks]
 
             for idx0, item in enumerate(label):
-                label[idx0] = reserved_classes.index(item)
+                label[idx0] = reserved_classes.index(int(item))
 
             output = model(data)
             loss = loss_func(output, label)
@@ -257,7 +189,7 @@ def fine_tuning(model, reserved_classes, EPOCH, lr, model_save_path,
             loss.backward()
             optimizer.step()
 
-            epoch_loss += loss.item()
+            epoch_loss += loss.detach().item()
             item_times += 1
 
         scheduler.step()
@@ -288,7 +220,7 @@ def fine_tuning(model, reserved_classes, EPOCH, lr, model_save_path,
 class myDataset(Dataset):
     def __init__(self, img_list, label_list):
         """
-        :argument 将读书的图片数据和label数据转换为dataset类型，可以让fine-tuning直接调用。
+        :argument 将图片数据和label数据转换为dataset类型，可以让fine-tuning直接调用。
         :param img_list:
         :param label_list:
         """
@@ -315,6 +247,7 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
     :param use_KL:
     :param divide_radio:
     :param redundancy_num:
+    :param use_norm: KL-div前面加上norm
 
     :return: 返回微调数据的data_loader
     """
@@ -333,9 +266,9 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
     if use_KL:
         image_Kc_list = np.zeros([len(reserved_classes), pics_num])
 
-    # image_num表示微调时选区的图片数量
     for data, label in tqdm(data_loader, desc='choosing fine tuning data: ', file=sys.stdout):
 
+        # 若没有使用KL-div 则能直接跳过and后面的判断
         if sum(counts) == len(reserved_classes) * pics_num \
                 and ((not use_KL) or sum(redundancy_counts) == len(reserved_classes) * redundancy_num):
             break
@@ -351,10 +284,10 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
 
                 # 使用kl-divergence 且图片还未满
                 if use_KL:
-                    dim = 0
-                    # 如果是第一张图片 则将其Kc值置为1
+                    dim = -1
+                    # 如果是第一张图片 则将其Kc值置为100 很大的值
                     if counts[list_idx] == 0:
-                        image_Kc_list[list_idx][0] = 1
+                        image_Kc_list[list_idx][0] = 0.001
 
                     # 不是第一张图
                     else:
@@ -402,17 +335,18 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
                 counts[list_idx] += 1
 
             # 使用kl且图片已满，冗余
-            elif use_KL and redundancy_counts[list_idx] < redundancy_num and counts[list_idx] == pics_num:
+            elif use_KL and counts[list_idx] == pics_num and redundancy_counts[list_idx] < redundancy_num:
 
-                Kc_min = min(image_Kc_list[list_idx])
-                # Kc_min_idx = image_Kc_list[list_idx].index(Kc_min)
-                Kc_min_idx = np.argmin(image_Kc_list[list_idx])
+                Kc_max = max(image_Kc_list[list_idx])
+                Kc_max_idx = np.argmax(image_Kc_list[list_idx])
 
-                KL_all = 0
+                # Kc_min = min(image_Kc_list[list_idx])
+                # Kc_min_idx = np.argmin(image_Kc_list[list_idx])
 
                 samples = [ig for ig in range(counts[list_idx])]
                 sample = random.sample(samples, int(pics_num / divide_radio))
 
+                KL_all = 0
                 for random_i in sample:
                     # x[idx_]当前图片 image_data_list[list_idx][random_i]已存图片随机选择一张
                     if not use_norm:
@@ -427,13 +361,17 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
 
                 Kc = KL_all / len(sample)
 
-                if Kc > Kc_min:
-                    image_Kc_list[list_idx][Kc_min_idx] = Kc
-                    img_list[list_idx][Kc_min_idx] = data[idx]
-                    label_list[list_idx][Kc_min_idx] = label[idx]
+                if Kc < Kc_max:
+                    image_Kc_list[list_idx][Kc_max_idx] = Kc
+                    img_list[list_idx][Kc_max_idx] = data[idx]
+                    label_list[list_idx][Kc_max_idx] = label[idx]
+                    redundancy_counts[list_idx] += 1
 
-
-                redundancy_counts[list_idx] += 1
+                # if Kc > Kc_min:
+                #     image_Kc_list[list_idx][Kc_min_idx] = Kc
+                #     img_list[list_idx][Kc_min_idx] = data[idx]
+                #     label_list[list_idx][Kc_min_idx] = label[idx]
+                #     redundancy_counts[list_idx] += 1
 
     imgs = []
     labels = []
@@ -446,3 +384,22 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
     new_data_loader = dataloader.DataLoader(mydataset, batch_size=batch_size, shuffle=True)
 
     return new_data_loader
+
+
+def show_imgs(imgs: torch.Tensor):
+    """
+    :argument: 显示图片
+    :param imgs: [b, c, h, w]
+    :return:
+    """
+    unloader = transforms.ToPILImage()
+    for idx, img in enumerate(imgs):
+        image = img.clone().cpu()
+        image = unloader(image)
+
+        plt.subplot(5, 10, idx+1)
+        plt.title(str(idx))
+        plt.axis('off')
+        plt.imshow(image)
+
+    plt.show()

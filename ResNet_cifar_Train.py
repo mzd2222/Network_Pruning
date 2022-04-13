@@ -11,10 +11,13 @@ from ResNet_cifar_Model import *
 
 from utils.Data_loader import Data_Loader_CIFAR
 
-# ----------------------------------------------- test
-def all_test(model, test_data_loader, dataset_num_class, device, finnal_test=False):
+# ----------------------------------------------- 训练用test
+def all_test(model, test_data_loader, device, finnal_test=False):
     model.to(device)
     model.eval()
+
+    # 计算有多少类别
+    dataset_num_class = max(test_data_loader.dataset.targets) + 1
 
     correct = 0
     if finnal_test:
@@ -66,8 +69,8 @@ def train_new_model(model, data_loader, device, EPOCH, lr, model_save_path):
 
     loss_func = nn.CrossEntropyLoss()
     optimizer = optim.SGD(params=model.parameters(), lr=lr, weight_decay=5e-4, momentum=0.9)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=600)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.3, verbose=True)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCH)
+    # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.3, verbose=True)
 
     optimizer.zero_grad()
 
@@ -93,8 +96,7 @@ def train_new_model(model, data_loader, device, EPOCH, lr, model_save_path):
 
         scheduler.step()
 
-        epoch_acc, _, _ = all_test(model, data_loader.test_data_loader, data_loader.dataset_num_class,
-                                   device, finnal_test=False)
+        epoch_acc, _, _ = all_test(model, data_loader.test_data_loader, device, finnal_test=False)
 
         if epoch_acc > best_acc:
             best_acc = epoch_acc
@@ -103,8 +105,7 @@ def train_new_model(model, data_loader, device, EPOCH, lr, model_save_path):
 
         if epoch % 10 == 0 and epoch != 0:
             epoch_acc, epoch_class_correct, epoch_class_acc = all_test(model, data_loader.test_data_loader,
-                                                                       data_loader.dataset_num_class, device,
-                                                                       finnal_test=True)
+                                                                       device, finnal_test=True)
             print('\n',
                   'epoch: ' + str(epoch), '\n',
                   'each class corrects: ', epoch_class_correct, '\n',
@@ -131,7 +132,6 @@ if __name__ == '__main__':
 
     model = torch.load(f='./models/ResNet/resnet56_before_9423.pkl').to(device)
     epoch_acc, epoch_class_correct, epoch_class_acc = all_test(model, data_loader.test_data_loader,
-                                                               data_loader.dataset_num_class, device,
-                                                               finnal_test=True)
+                                                               device, finnal_test=True)
     print('\n', '1each class corrects: ', epoch_class_correct, '\n',
           '1each class accuracy: ', epoch_class_acc, '\n', '1total accuracy: ', epoch_acc)
