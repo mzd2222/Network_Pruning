@@ -29,8 +29,8 @@ def Compute_activation_scores(activations_):
     """
     activations_scores = []
     for activation in activations_:
-        activation = F.leaky_relu(activation)
-        # activation = F.relu(activation)
+        # activation = F.leaky_relu(activation)
+        activation = F.relu(activation)
         # 一阶范数
         # activations_scores.append(activation.norm(dim=(1, 2), p=1))
         # 二阶范数
@@ -347,15 +347,15 @@ if __name__ == '__main__':
 
     reserved_classes_list = [[0, 1, 2, 3, 4]]
 
-    version_id = 5  # 指定
+    version_id = 9  # 指定
     model_id = 0  # 保存模型的id
 
     fine_tuning_epoch = 50
-    manual_radio = 0.74
+    manual_radio = 0.67
 
     fine_tuning_lr = 0.001
     fine_tuning_batch_size = 128
-    fine_tuning_pics_num = 32
+    fine_tuning_pics_num = 16
 
     use_KL_divergence = True
     divide_radio = 1
@@ -364,7 +364,7 @@ if __name__ == '__main__':
 
     frozen = False
 
-    version_msg = "版本备注:使用max"
+    version_msg = "版本备注:使用min，使用relu"
     # version_msg = "版本备注:train的时候用eval训练,保持bn层数据不变"
     # version_msg = "版本备注:冻结除bn和fc的其他层,bn层冻结"
 

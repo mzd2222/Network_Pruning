@@ -287,7 +287,7 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
                     dim = -1
                     # 如果是第一张图片 则将其Kc值置为100 很大的值
                     if counts[list_idx] == 0:
-                        image_Kc_list[list_idx][0] = 0.001
+                        image_Kc_list[list_idx][0] = 100.0
 
                     # 不是第一张图
                     else:
@@ -337,11 +337,11 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
             # 使用kl且图片已满，冗余
             elif use_KL and counts[list_idx] == pics_num and redundancy_counts[list_idx] < redundancy_num:
 
-                Kc_max = max(image_Kc_list[list_idx])
-                Kc_max_idx = np.argmax(image_Kc_list[list_idx])
+                # Kc_max = max(image_Kc_list[list_idx])
+                # Kc_max_idx = np.argmax(image_Kc_list[list_idx])
 
-                # Kc_min = min(image_Kc_list[list_idx])
-                # Kc_min_idx = np.argmin(image_Kc_list[list_idx])
+                Kc_min = min(image_Kc_list[list_idx])
+                Kc_min_idx = np.argmin(image_Kc_list[list_idx])
 
                 samples = [ig for ig in range(counts[list_idx])]
                 sample = random.sample(samples, int(pics_num / divide_radio))
@@ -361,17 +361,17 @@ def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_s
 
                 Kc = KL_all / len(sample)
 
-                if Kc < Kc_max:
-                    image_Kc_list[list_idx][Kc_max_idx] = Kc
-                    img_list[list_idx][Kc_max_idx] = data[idx]
-                    label_list[list_idx][Kc_max_idx] = label[idx]
-                    redundancy_counts[list_idx] += 1
-
-                # if Kc > Kc_min:
-                #     image_Kc_list[list_idx][Kc_min_idx] = Kc
-                #     img_list[list_idx][Kc_min_idx] = data[idx]
-                #     label_list[list_idx][Kc_min_idx] = label[idx]
+                # if Kc < Kc_max:
+                #     image_Kc_list[list_idx][Kc_max_idx] = Kc
+                #     img_list[list_idx][Kc_max_idx] = data[idx]
+                #     label_list[list_idx][Kc_max_idx] = label[idx]
                 #     redundancy_counts[list_idx] += 1
+
+                if Kc > Kc_min:
+                    image_Kc_list[list_idx][Kc_min_idx] = Kc
+                    img_list[list_idx][Kc_min_idx] = data[idx]
+                    label_list[list_idx][Kc_min_idx] = label[idx]
+                    redundancy_counts[list_idx] += 1
 
     imgs = []
     labels = []

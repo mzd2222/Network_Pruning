@@ -64,3 +64,48 @@
 3 7 0.9451 16 16 50 0.001 128 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:无 ./models/ResNet/version3_resnet56_after_model_7.pkl 
 3 8 0.9455 16 16 50 0.001 256 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:无 ./models/ResNet/version3_resnet56_after_model_8.pkl 
 
+5 0 0.9541 128 32 50 0.001 0 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max ,使用leaky_relu ./models/ResNet/version5_resnet56_after_model_0.pkl
+5 1 0.9529 128 32 50 0.001 4 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max ,使用leaky_relu./models/ResNet/version5_resnet56_after_model_0.pkl
+5 2 0.9547 128 32 50 0.001 8 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max ,使用leaky_relu./models/ResNet/version5_resnet56_after_model_0.pkl
+5 3 0.9549 128 32 50 0.001 16 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max ,使用leaky_relu./models/ResNet/version5_resnet56_after_model_0.pkl
+5 4 0.9541 128 32 50 0.001 32 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max ,使用leaky_relu./models/ResNet/version5_resnet56_after_model_0.pkl
+5 5 0.9517 128 32 50 0.001 64 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max ,使用leaky_relu./models/ResNet/version5_resnet56_after_model_0.pkl
+5 6 0.9521 128 32 50 0.001 128 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max ,使用leaky_relu./models/ResNet/version5_resnet56_after_model_0.pkl
+5 7 0.9493 128 32 50 0.001 256 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max ,使用leaky_relu./models/ResNet/version5_resnet56_after_model_0.pkl
+
+6 0 0.9233 128 32 50 0.001 0 1 True 0.67 0.4746 [0, 1, 2, 3, 4] 版本备注:使用max，不使用leaky_relu ./models/ResNet/version6_resnet56_after_model_0.pkl 
+6 1 0.9227 128 32 50 0.001 4 1 True 0.67 0.4746 [0, 1, 2, 3, 4] 版本备注:使用max，不使用leaky_relu ./models/ResNet/version6_resnet56_after_model_0.pkl 
+6 2 0.9225 128 32 50 0.001 8 1 True 0.67 0.4746 [0, 1, 2, 3, 4] 版本备注:使用max，不使用leaky_relu ./models/ResNet/version6_resnet56_after_model_0.pkl 
+6 3 0.9251 128 32 50 0.001 16 1 True 0.67 0.4746 [0, 1, 2, 3, 4] 版本备注:使用max，不使用leaky_relu ./models/ResNet/version6_resnet56_after_model_0.pkl 
+6 4 0.9221 128 32 50 0.001 32 1 True 0.67 0.4746 [0, 1, 2, 3, 4] 版本备注:使用max，不使用leaky_relu ./models/ResNet/version6_resnet56_after_model_0.pkl 
+6 5 0.9241 128 32 50 0.001 64 1 True 0.67 0.4746 [0, 1, 2, 3, 4] 版本备注:使用max，不使用leaky_relu ./models/ResNet/version6_resnet56_after_model_0.pkl 
+6 6 0.9197 128 32 50 0.001 128 1 True 0.67 0.4746 [0, 1, 2, 3, 4] 版本备注:使用max，不使用leaky_relu ./models/ResNet/version6_resnet56_after_model_0.pkl 
+6 7 0.9149 128 32 50 0.001 256 1 True 0.67 0.4746 [0, 1, 2, 3, 4] 版本备注:使用max，不使用leaky_relu ./models/ResNet/version6_resnet56_after_model_0.pkl 
+
+7 0 0.9589 128 32 50 0.001 0 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用max，使用relu ./models/ResNet/version7_resnet56_after_model_0.pkl
+7 1 0.9607 128 32 50 0.001 4 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用max，使用relu ./models/ResNet/version7_resnet56_after_model_0.pkl
+7 2 0.9601 128 32 50 0.001 8 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用max，使用relu ./models/ResNet/version7_resnet56_after_model_0.pkl
+7 3 0.9589 128 32 50 0.001 16 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用max，使用relu ./models/ResNet/version7_resnet56_after_model_0.pkl
+7 4 0.  128 32 50 0.001 32 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用max，使用relu ./models/ResNet/version7_resnet56_after_model_0.pkl
+7 5 0.9585 128 32 50 0.001 64 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用max，使用relu ./models/ResNet/version7_resnet56_after_model_0.pkl
+7 6 0.9587 128 32 50 0.001 128 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用max，使用relu ./models/ResNet/version7_resnet56_after_model_0.pkl
+7 7 0.9557 128 32 50 0.001 256 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用max，使用relu ./models/ResNet/version7_resnet56_after_model_0.pkl
+
+8 0 0.9589 128 32 50 0.001 0 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用min，使用relu ./models/ResNet/version8_resnet56_after_model_0.pkl
+8 1 0.9607 128 32 50 0.001 4 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用min，使用relu ./models/ResNet/version8_resnet56_after_model_0.pkl
+8 2 0.9579 128 32 50 0.001 8 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用min，使用relu ./models/ResNet/version8_resnet56_after_model_0.pkl
+8 3 0.9589 128 32 50 0.001 16 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用min，使用relu ./models/ResNet/version8_resnet56_after_model_0.pkl
+8 4 0.9599 128 32 50 0.001 32 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用min，使用relu ./models/ResNet/version8_resnet56_after_model_0.pkl
+8 5 0.9553 128 32 50 0.001 64 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用min，使用relu ./models/ResNet/version8_resnet56_after_model_0.pkl
+8 6 0.9499 128 32 50 0.001 128 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用min，使用relu ./models/ResNet/version8_resnet56_after_model_0.pkl
+8 7 0.9443 128 32 50 0.001 256 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用min，使用relu ./models/ResNet/version8_resnet56_after_model_0.pkl
+
+9 0 0.9467 128 32 50 0.001 256 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用min，使用relu ./models/ResNet/version9_resnet56_after_model_0.pkl
+9 1 0.9483 128 32 50 0.001 128 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用min，使用relu ./models/ResNet/version9_resnet56_after_model_0.pkl 
+9 2 0.9547 128 32 50 0.001 64 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用min，使用relu ./models/ResNet/version9_resnet56_after_model_0.pkl 
+9 3 0.9569 128 32 50 0.001 32 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用min，使用relu ./models/ResNet/version9_resnet56_after_model_0.pkl 
+9 4 0.9573 128 32 50 0.001 16 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用min，使用relu ./models/ResNet/version9_resnet56_after_model_0.pkl 
+9 5 0.9583 128 32 50 0.001 8 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用min，使用relu ./models/ResNet/version9_resnet56_after_model_0.pkl 
+9 6 0.9597 128 32 50 0.001 4 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用min，使用relu ./models/ResNet/version9_resnet56_after_model_0.pkl 
+9 7 0.9613 128 32 50 0.001 0 1 True 0.67 0.4654 [0, 1, 2, 3, 4] 版本备注:使用min，使用relu ./models/ResNet/version9_resnet56_after_model_0.pkl 
+

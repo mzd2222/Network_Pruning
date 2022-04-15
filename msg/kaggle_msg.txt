@@ -11,3 +11,39 @@
 2 1 0.7781 2048 1024 80 0.01 256 4 True 0.562 0.585 [0, 1, 2, 3, 4] 版本备注:无 /kaggle/working/version2_resnet56_after_model_1.pkl
 2 2 0.7813 2048 1024 80 0.01 512 4 True 0.562 0.5855 [0, 1, 2, 3, 4] 版本备注:无 /kaggle/working/version2_resnet56_after_model_2.pkl
 2 3 0.7545 2048 1024 80 0.01 1024 4 True 0.562 0.5855 [0, 1, 2, 3, 4] 版本备注:无 /kaggle/working/version2_resnet56_after_model_3.pkl
+
+0 0 0.9531 128 64 50 0.001 256 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 1 0.9547 128 64 50 0.001 128 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 2 0.9533 128 64 50 0.001 64 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 3 0.9563 128 64 50 0.001 32 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 4 0.9549 128 64 50 0.001 16 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 5 0.9569 128 64 50 0.001 8 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 6 0.9543 128 64 50 0.001 4 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 7 0.9539 128 64 50 0.001 0 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+
+0 0 0.9549 128 64 50 0.001 0 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 1 0.9549 128 64 50 0.001 4 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 2 0.9551 128 64 50 0.001 8 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 3 0.9565 128 64 50 0.001 16 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 4 0.9551 128 64 50 0.001 32 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 5 0.9535 128 64 50 0.001 64 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 6 0.9557 128 64 50 0.001 128 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 7 0.9531 128 64 50 0.001 256 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+
+0 0 0.9541 128 32 50 0.001 0 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max,use_norm = False /kaggle/working/version0_resnet56_after_model_0.pkl
+0 1 0.9535 128 32 50 0.001 4 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max,use_norm = False /kaggle/working/version0_resnet56_after_model_0.pkl
+0 2 0.9551 128 32 50 0.001 8 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max,use_norm = False /kaggle/working/version0_resnet56_after_model_0.pkl
+0 3 0.9521 128 32 50 0.001 16 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max,use_norm = False /kaggle/working/version0_resnet56_after_model_0.pkl
+0 4 0.9527 128 32 50 0.001 32 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max,use_norm = False /kaggle/working/version0_resnet56_after_model_0.pkl
+0 5 0.9519 128 32 50 0.001 64 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max,use_norm = False /kaggle/working/version0_resnet56_after_model_0.pkl
+0 6 0.9481 128 32 50 0.001 128 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max,use_norm = False /kaggle/working/version0_resnet56_after_model_0.pkl
+0 7 0.9429 128 32 50 0.001 256 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max,use_norm = False /kaggle/working/version0_resnet56_after_model_0.pkl
+
+0 0 0.9493 128 32 50 0.001 256 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 1 0.9515 128 32 50 0.001 128 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 2 0.9521 128 32 50 0.001 64 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 3 0.9569 128 32 50 0.001 32 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 4 0.9549 128 32 50 0.001 16 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 5 0.9557 128 32 50 0.001 8 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 6 0.9531 128 32 50 0.001 4 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
+0 7 0.9537 128 32 50 0.001 0 1 True 0.74 0.4733 [0, 1, 2, 3, 4] 版本备注:使用max /kaggle/working/version0_resnet56_after_model_0.pkl
