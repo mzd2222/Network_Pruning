@@ -1,13 +1,8 @@
 import sys
-import torch
-import torch.nn as nn
 from tqdm import tqdm
 import torch.optim as optim
-import torch.nn.functional as F
 # from torchsummary import summary
-from torch.utils.data import dataloader
-from torchvision import datasets, transforms
-from ResNet_cifar_Model import *
+from models.ResNet_cifar_Model import *
 
 from utils.Data_loader import Data_Loader_CIFAR
 

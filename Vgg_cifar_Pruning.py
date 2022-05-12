@@ -1,4 +1,4 @@
-from models.ResNet_cifar_Model import *
+from models.Vgg_cifal_Model import *
 
 from utils.Data_loader import Data_Loader_CIFAR
 from utils.Functions import *
@@ -8,10 +8,18 @@ activations = []
 record_activations = []
 
 
-
-def acvition_hook(model, input, output):
+# 计算mask使用的activation_hook
+def mask_activation_hook(module, input, output):
     global activations
     activations.append(output.clone().detach().cpu())
+    return
+
+
+# 记录前向推理使用的activation_hook
+def forward_activation_hook(module, input, output):
+    global record_activations
+    record = input[0].clone().detach().cpu()
+    record_activations.append(record)
     return
 
 
@@ -23,14 +31,11 @@ def Compute_activation_scores(activations_):
     """
     activations_scores = []
     for activation in activations_:
-        activation = F.leaky_relu(activation)
-        # activation = F.relu(activation)
-        # 一阶范数
-        # activations_scores.append(activation.norm(dim=(1, 2), p=1))
+        # activation = F.leaky_relu(activation)
+        activation = F.relu(activation)
         # 二阶范数
         activations_scores.append(activation.norm(dim=(1, 2), p=2))
-        # 秩
-        # activations_scores.append(torch.linalg.matrix_rank(activation))
+
     return activations_scores
 
 
@@ -79,7 +84,7 @@ def Compute_layer_mask(imgs, model, percent, device):
 
         for module in model.modules():
             if isinstance(module, nn.BatchNorm2d):
-                hook = module.register_forward_hook(acvition_hook)
+                hook = module.register_forward_hook(mask_activation_hook)
                 hooks.append(hook)
 
         imgs = imgs.to(device)
@@ -179,6 +184,9 @@ def pre_processing_Pruning(model: nn.Module, masks, jump_layers=2):
 
             count += 1
 
+        elif isinstance(module, nn.MaxPool2d):
+            cfg.append('M')
+
     pruned_ratio = pruned / total
 
     return cfg, cfg_mask, pruned_ratio.detach().item()
@@ -197,103 +205,45 @@ def Real_Pruning(old_model: nn.Module, new_model: nn.Module, cfg_masks, reserved
 
     old_model.eval()
     new_model.eval()
-    old_modules_list = list(old_model.named_modules())
-    new_modules_list = list(new_model.named_modules())
+    old_modules_list = list(old_model.modules())
+    new_modules_list = list(new_model.modules())
 
-    bn_idx = 0  # bn计数
-    conv_idx = 0  # conv计数
+    mask_idx = 0  # mask id
 
-    current_mask = torch.ones(16)  # 记录当前bn层的mask
-    next_mask = cfg_masks[bn_idx]  # 记录下一层bn的mask
-
-    # 因为上面用了list(name_modules) 所以其中 [0]表示name  [1]表示module
-    for idx, (old, new) in enumerate(zip(old_modules_list, new_modules_list)):
-
-        old_name = old[0]
-        new_name = new[0]
-        old_module = old[1]
-        new_module = new[1]
+    for idx, (old_module, new_module) in enumerate(zip(old_modules_list, new_modules_list)):
 
         if isinstance(old_module, nn.BatchNorm2d):
+            new_module.weight.data = old_module.weight.data.clone()[cfg_masks[mask_idx]]
+            new_module.bias.data = old_module.bias.data.clone()[cfg_masks[mask_idx]]
+            new_module.running_mean = old_module.running_mean.clone()[cfg_masks[mask_idx]]
+            new_module.running_var = old_module.running_var.clone()[cfg_masks[mask_idx]]
 
-            current_mask = next_mask
-            next_mask = cfg_masks[bn_idx + 1 if bn_idx + 1 < len(cfg_masks) else bn_idx]
+            mask_idx += 1
 
-            # 如果下一层是cs层，曾调整cs层indexes以实现cs层剪枝
-            if isinstance(old_modules_list[idx + 1][1], channel_selection):
-                new_module.weight.data = old_module.weight.data.clone()
-                new_module.bias.data = old_module.bias.data.clone()
-                new_module.running_mean = old_module.running_mean.clone()
-                new_module.running_var = old_module.running_var.clone()
-
-                # 调整cs层index
-                new_modules_list[idx + 1][1].indexes.data = current_mask.clone()
-
-            # 下一层不是cs，则对bn层剪枝
-            else:
-                # True的位置保留， False位置直接移除
-                # 输入对齐
-                new_module.weight.data = old_module.weight.data.clone()[current_mask]
-                new_module.bias.data = old_module.bias.data.clone()[current_mask]
-                new_module.running_mean = old_module.running_mean.clone()[current_mask]
-                new_module.running_var = old_module.running_var.clone()[current_mask]
-
-            bn_idx += 1
-
-        # 注意卷积层bias全部关掉，不用拷贝
         if isinstance(old_module, nn.Conv2d):
 
-            # 第一个conv层为外部conv层，不剪枝
-            if conv_idx == 0:
-                new_module.weight.data = old_module.weight.data.clone()
-                conv_idx += 1
+            out_mask = cfg_masks[mask_idx]
 
-            # 当前conv层前两层不是cs层也不是bn层(表示该层为downsample层) 不剪枝 直接拷贝
-            elif not isinstance(old_modules_list[idx - 2][1], channel_selection) and \
-                    not isinstance(old_modules_list[idx - 2][1], nn.BatchNorm2d):
-                # print(old_name, new_name)
-                new_module.weight.data = old_module.weight.data.clone()
-
-            # 当前conv层根据其前面bn层进行剪枝
+            if mask_idx > 0:
+                in_mask = cfg_masks[mask_idx - 1]
+                new_weight = old_module.weight.data.clone()[:, in_mask, :, :]
+                new_module.weight.data = new_weight.clone()[out_mask, :, :, :]
             else:
-                # weight结构为[out_channel, in_channel, _, _]
-                # 输出对齐
-                conv_weight = old_module.weight.data.clone()[:, current_mask, :, :]
+                new_module.weight.data = old_module.weight.data.clone()[out_mask, :, :, :]
 
-                # 每个block最后一层的输出不变
-                if conv_idx % 3 != 0:
-                    # 输出对齐
-                    conv_weight = conv_weight[next_mask, :, :, :]
-
-                new_module.weight.data = conv_weight.clone()
-
-                # print(conv_weight.size())
-                # print(new_module.weight.data.size())
-                # print(old_module.weight.data.size())
-                # print()
-
-                conv_idx += 1
-
-        # 对齐最后linear层于卷积的输出
         if isinstance(old_module, nn.Linear):
-            # 替换掉原始fc
-            input_size = sum(current_mask)
-            out_size = len(reserved_class)
-            new_model.fc = nn.Linear(input_size, out_size)
 
-            # 原模型fc数据拷贝
-            # 删除剪掉的类
             out_mask = torch.full([old_module.weight.data.size(0)], False)
-            for i in reserved_class:
-                out_mask[i] = True
+            for ii in reserved_class:
+                out_mask[ii] = True
 
             # 改变输入size
-            fc_data = old_module.weight.data.clone()[:, current_mask]
+            fc_data = old_module.weight.data.clone()[:, cfg_masks[-1]]
             # 改变输出size
-            fc_data = fc_data[out_mask, :]
+            fc_data = fc_data.clone()[out_mask, :]
 
-            new_model.fc.weight.data = fc_data.clone()
-            new_model.fc.bias.data = old_module.bias.data.clone()[out_mask]
+            new_module.weight.data = fc_data.clone()
+            new_module.bias.data = old_module.bias.data.clone()[out_mask]
 
     # test
     # aa = torch.randn(2, 3, 32, 32)
@@ -312,43 +262,27 @@ if __name__ == '__main__':
     np.random.seed(1)
     random.seed(1)
 
-    # vis = Visdom()
-    # # 加一行能显示标签
-    # vis.line([0], [0], win='acc', name='line', opts=dict(legend=['']))
-    # vis.line([0], [0], win='loss', name='line', opts=dict(legend=['']))
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_loader = Data_Loader_CIFAR(train_batch_size=1024, test_batch_size=1024,
                                     dataSet=dataSet_name, use_data_Augmentation=False,
                                     download=False, train_shuffle=True)
 
-    # model = resnet56(num_classes=data_loader.dataset_num_class).to(device)
-    # model = torch.load(f='./models/ResNet/resnet32_before_9393.pkl').to(device)
-    model = torch.load(f='./models/ResNet/resnet56_before_9423.pkl').to(device)
-    # model = torch.load(f='../input/resnet-pruning-cifar-code/models/ResNet/resnet56_before_9423.pkl').to(device)
+    model = torch.load(f='./models/Vgg/vgg16_before_9412.pkl').to(device)
+    # model = torch.load(f='../input/resnet-pruning-cifar-code/models/Vgg/vgg16_before_9412.pkl').to(device)
     model.eval()
 
-    # --------------------------------------------- 剪枝前模型测试
+    # 测试剪枝前模型
     # test_reserved_classes(model=model, device=device, reserved_classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
     #                       test_data_loader=data_loader.test_data_loader, is_print=True, test_class=True)
 
-    # reserved_classes_list = [[2, 4],
-    #                          [2, 4, 7],
-    #                          [2, 4, 7, 9],
-    #                          [1, 2, 4, 7, 9],
-    #                          [1, 2, 3, 4, 7, 9],
-    #                          [1, 2, 3, 4, 6, 7, 9],
-    #                          [1, 2, 3, 4, 6, 7, 8, 9],
-    #                          [1, 2, 3, 4, 5, 6, 7, 8, 9],
-    #                          [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]
-    #
-    # reserved_classes_list = [[0, 1, 2, 3, 4, 5, 6, 7]]
 
-    version_id = 18  # 指定
+    reserved_classes_list = [[0, 1, 2, 3, 4, 5, 6, 7]]
+
+    version_id = 0  # 指定
     model_id = 0  # 保存模型的id
 
     fine_tuning_epoch = 50
-    manual_radio = 0.67
+    manual_radio = 0.8
 
     fine_tuning_lr = 0.001
     fine_tuning_batch_size = 128
@@ -364,18 +298,16 @@ if __name__ == '__main__':
 
     frozen = False
 
-    version_msg = "版本备注:方法2 kl选取 使用最大 图片池改为256 mile stone 20 40 batch size 256"
-    # version_msg = "版本备注:train的时候用eval训练,保持bn层数据不变"
-    # version_msg = "版本备注:冻结除bn和fc的其他层,bn层冻结"
+    version_msg = "版本备注:"
 
-    msg_save_path = "./msg/model_msg2.txt"
-    model_save_path = './models/ResNet/version'
+    msg_save_path = "./msg/model_msg5.txt"
+    model_save_path = './models/Vgg/version'
     # msg_save_path = "/kaggle/working/model_msg.txt"
     # model_save_path = '/kaggle/working/version'
-    model_save_path += str(version_id) + '_resnet56_after_model_' + str(model_id) + '.pkl'
+    model_save_path += str(version_id) + '_vgg16_after_model_' + str(model_id) + '.pkl'
 
-    reserved_classes = [0, 1, 2, 3, 4, 5, 6, 7]
-    # reserved_classes = [1, 3, 4, 9]
+    reserved_classes = [0, 1, 2, 3, 4]
+
     max_kc = None
     min_kc = None
     FLOPs_radio = 0.00
@@ -384,54 +316,68 @@ if __name__ == '__main__':
     # --------------
     # ----------------------------------------------------------------------
 
-    imgs = read_Img_by_class(target_class=reserved_classes, pics_num=10,
-                             data_loader=data_loader.train_data_loader, device=device)
-    layer_masks = Compute_layer_mask(imgs=imgs, model=model, percent=manual_radio, device=device)
-    # --------------------------------------------- 预剪枝,计算mask
-    cfg, cfg_masks, pruned_radio = pre_processing_Pruning(model, layer_masks)
+    # ----------第一步：进行一定数量的前向推理forward，并记录图片和中间激活值
+    record_dataloader = read_Img_by_class(pics_num=record_imgs_num,
+                                          batch_size=record_batch,
+                                          target_class=reserved_classes,
+                                          data_loader=data_loader.train_data_loader,
+                                          shuffle=False)
+
+    for module in model.modules():
+        if isinstance(module, nn.Linear):
+            hook = module.register_forward_hook(forward_activation_hook)
 
     # 模拟实际前向推理(剪枝前)，记录数据
     model.eval()
     with torch.no_grad():
         for forward_x, _ in record_dataloader:
             forward_x = forward_x.to(device)
-            # forward_label = forward_label.to(device)
             _ = model(forward_x)
-            # print(torch.max(F.softmax(out, dim=1), dim=1).values)
-
     hook.remove()
-    # ----------第二部：根据前向推理图片获取保留的类，并计算mask，进行剪枝，获得剪枝后的新模型
 
+
+    # ----------第二部：根据前向推理图片获取保留的类，并计算mask，进行剪枝，获得剪枝后的新模型
     # 从记录数据中选取一部分计算mask
     imgs_tensor = choose_mask_imgs(target_class=reserved_classes,
                                    data_loader=record_dataloader,
-                                   pics_num=10)
+                                   pics_num=50)
     layer_masks = Compute_layer_mask(imgs=imgs_tensor, model=model, percent=manual_radio, device=device)
 
-    # # 对比不同数量图片计算mask的作图
+    # 对比不同数量图片计算mask的作图
     # rv_pics_num_list = [1, 2, 5, 10, 20, 40, 80, 120]
     # for rv_pics_num in rv_pics_num_list:
-    #
     #     imgs_tensor = choose_mask_imgs(target_class=reserved_classes,
     #                                    data_loader=record_dataloader,
     #                                    pics_num=rv_pics_num)
     #     layer_masks = Compute_layer_mask(imgs=imgs_tensor, model=model, percent=manual_radio, device=device)
     #
+    #
     #     for idx, mask_ in enumerate(layer_masks):
     #         mask = mask_.clone().cpu().numpy().reshape(1, -1)
     #         try:
-    #             old_mask = np.load('./mask_numpy/ResNet56/layer' + str(idx + 1) + '.npy')
+    #             old_mask = np.load('./mask_numpy/Vgg16/layer' + str(idx + 1) + '.npy')
     #             new_mask = np.vstack((old_mask, mask))
     #             print(new_mask.shape)
-    #             np.save('./mask_numpy/ResNet56/layer' + str(idx + 1) + '.npy', new_mask)
+    #             np.save('./mask_numpy/Vgg16/layer' + str(idx + 1) + '.npy', new_mask)
     #         except:
-    #             np.save('./mask_numpy/ResNet56/layer' + str(idx + 1) + '.npy', mask)
+    #             np.save('./mask_numpy/Vgg16/layer' + str(idx + 1) + '.npy', mask)
     # exit(0)
 
     # 预剪枝,计算mask
-    cfg, cfg_masks, filter_remove_radio = pre_processing_Pruning(model, layer_masks, jump_layers=3)
+    cfg, cfg_masks, filter_remove_radio = pre_processing_Pruning(model, layer_masks, jump_layers=2)
     filter_remain_radio = 1 - filter_remove_radio
 
+    # 根据cfg生成模型
+    new_model = vgg16(data_loader.dataset_num_class, cfg=cfg).to(device)
+    # 正式剪枝,参数拷贝
+    model_after_pruning = Real_Pruning(old_model=model, new_model=new_model,
+                                       cfg_masks=cfg_masks, reserved_class=reserved_classes)
+
+    # 剪枝后模型测试
+    test_reserved_classes(model=model_after_pruning, device=device, reserved_classes=reserved_classes,
+                          test_data_loader=data_loader.test_data_loader, test_class=True, is_print=True)
+
+    exit(0)
     # for reserved_classes in reserved_classes_list:
     redundancy_num_list = [0, 16, 32, 64, 80, 100, 128, 200, 256, 320]
     # redundancy_num_list = [256]
@@ -440,13 +386,6 @@ if __name__ == '__main__':
     # fine_tuning_pics_num_list = [128, 256, 512, 1024]
     for redundancy_num in redundancy_num_list:
         for i in range(3):
-
-            # 根据cfg生成模型
-            new_model = resnet56(data_loader.dataset_num_class, cfg=cfg).to(device)
-
-            # 正式剪枝,参数拷贝
-            model_after_pruning = Real_Pruning(old_model=model, new_model=new_model,
-                                               cfg_masks=cfg_masks, reserved_class=reserved_classes)
 
             # 多GPU微调
             if torch.cuda.device_count() > 1:

@@ -203,25 +203,31 @@ def resnet101(num_classes=10, cfg=None):
 
 
 if __name__ == '__main__':
+    from fvcore.nn import FlopCountAnalysis, parameter_count_table, parameter_count
+    from thop import profile
     torch.manual_seed(1)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # model = resnet20().to(device)
     # model = resnet32().to(device)
     model = resnet56().to(device)
-    # model = resnet101().to(device)
 
-    # summary(model, input_size=(3, 32, 32))
+    tensor = torch.rand(1, 3, 32, 32).to(device)
 
-    for name, module1 in model.named_modules():
-        # if isinstance(module, nn.BatchNorm2d):
-        # print(name, module1._get_name())
-        print(name)
+    # 分析FLOPs
+    flops = FlopCountAnalysis(model, (tensor,))
+    print(flops.by_module())
+    print("FLOPs: ", flops.total()/1000 ** 3, 'G')
+    print(parameter_count_table(model))
+    print(parameter_count(model)[''])
 
-    # name = list(model.named_modules())
+    flops, params = profile(model, inputs=(tensor,))
+    print('FLOPs = ' + str(flops / 1000 ** 3) + 'G')
+    print('Params = ' + str(params / 1000 ** 2) + 'M')
 
+    total = sum([param.nelement() for param in model.parameters()])
+    print('  + Number of params: %.2fM' % (total / 1e6))
     # print(name[1][0])
-
     # for module in model.modules():
     #     if isinstance(module, nn.MaxPool2d):
     #         module = nn.Sequential()
