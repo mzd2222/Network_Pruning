@@ -1,3 +1,6 @@
+import torch
+import winnt
+
 from models.Vgg_cifal_Model import *
 
 from utils.Data_loader import Data_Loader_CIFAR
@@ -23,16 +26,18 @@ def forward_activation_hook(module, input, output):
     return
 
 
-def Compute_activation_scores(activations_):
+def Compute_activation_scores(activations_, activation_func=None):
     """
     :argument 计算每个通道评价标准(重要性)
     :param activations_: [c,h,w]
+    :param activation_func:
     :return: [c]
     """
     activations_scores = []
     for activation in activations_:
-        # activation = F.leaky_relu(activation)
-        activation = F.relu(activation)
+
+        if activation_func is not None:
+            activation = activation_func(activation)
         # 二阶范数
         activations_scores.append(activation.norm(dim=(1, 2), p=2))
 
@@ -62,15 +67,18 @@ def Compute_activation_thresholds(activations_scores, percent):
     return thresholds
 
 
-def Compute_layer_mask(imgs, model, percent, device):
+def Compute_layer_mask(imgs, model, percent, device, activation_func):
     """
     :argument 根据输入图片计算masks
-    :param percent: 剪枝比例(剪掉的比率)
+    :param percent: 保留的比例
     :argument 根据输入图片获取模型的mask
     :param imgs: 输入图片tensor
     :param model:
+    :param activation_func:
     :return: masks 维度为 [layer_num, c]
     """
+
+    percent = 1 - percent  # 通过保留比例 计算出需要剪掉的比例percent
 
     global activations
     # 此处需要把模型更改为eval状态，否则在计算layer_mask时输入的数据会改变bn层参数，导致正确率下降
@@ -79,7 +87,6 @@ def Compute_layer_mask(imgs, model, percent, device):
     with torch.no_grad():
         imgs_masks = []
         hooks = []
-        activations_list = []
         activations.clear()
 
         for module in model.modules():
@@ -93,46 +100,84 @@ def Compute_layer_mask(imgs, model, percent, device):
         for hook in hooks:
             hook.remove()
 
-        # TODO: 优化一下实现
-        # 原本activations结构为[layer_num, pics_num, c, h, w] 转换为 [pics_num, layer_num, c, h, w]
-        # 外层对pics_num图片循环，内层对layer_num循环
-        for pics_idx in range(len(activations[0])):
-            one_img_activation = []
-            for layer_msg in activations:
-                one_img_activation.append(layer_msg[pics_idx])
-            activations_list.append(one_img_activation)
-        # 清空不使用的列表
-        activations.clear()
+        # ------版本1：一张一张处理
+        # activations_list = []
+        # # 下面版本2一层一层处理的方式更优
+        # # 原本activations结构为[layer_num, pics_num, c, h, w] 转换为 [pics_num, layer_num, c, h, w]
+        # # 外层对pics_num图片循环，内层对layer_num循环
+        # for pics_idx in range(len(activations[0])):
+        #     one_img_activation = []
+        #     for layer_msg in activations:
+        #         one_img_activation.append(layer_msg[pics_idx])
+        #     activations_list.append(one_img_activation)
+        # # 清空不使用的列表
+        # activations.clear()
+        #
+        # for activations_ in activations_list:
+        #     # 计算每个通道评价标准(重要性) [layer_num, c, h, w] => [layer_num, c]
+        #     activations_scores = Compute_activation_scores(activations_, activation_func)
+        #     # 计算阈值thresholds [layer_num, c] => [layer_num, 1]
+        #     thresholds = Compute_activation_thresholds(activations_scores, percent)
+        #
+        #     one_img_mask = []
+        #     # 计算掩码 mask []
+        #     for i in range(len(thresholds)):
+        #         # [c]
+        #         layer_mask = activations_scores[i].gt(thresholds[i]).to(device)
+        #         # [layer_num, c]
+        #         one_img_mask.append(layer_mask)
+        #
+        #     imgs_masks.append(one_img_mask)
+        #
+        # # 清空不使用的列表
+        # activations_list.clear()
+        # activations_scores.clear()
+        # thresholds.clear()
+        #
+        # # 合并 [image_num, layer_num, c] => [layer_num, c]
+        # img_num = len(imgs_masks)
+        # layer_num = len(imgs_masks[0])
+        # masks = imgs_masks[0]
+        #
+        # for i in range(layer_num):
+        #     for j in range(1, img_num):
+        #         masks[i] = masks[i] | imgs_masks[j][i]
 
-        for activations_ in activations_list:
-            # 计算每个通道评价标准(重要性) [layer_num, c, h, w] => [layer_num, c]
-            activations_scores = Compute_activation_scores(activations_)
-            # 计算阈值thresholds [layer_num, c] => [layer_num, 1]
-            thresholds = Compute_activation_thresholds(activations_scores, percent)
-
-            one_img_mask = []
-            # 计算掩码 mask []
-            for i in range(len(thresholds)):
+        # ------版本2 一层一层处理
+        masks = []
+        for layer_activations in activations:
+            if activation_func is not None:
+                layer_activations = activation_func(layer_activations)
+            # [img_num, c, h, w] => [img_num, c] --- [800, 64, 32, 32] => [800, 64]
+            layer_activations_score = layer_activations.norm(dim=(2, 3), p=2)
+            # [img_num, c]  eg [800, 64]
+            layer_masks = torch.empty_like(layer_activations_score, dtype=torch.bool)
+            # [image_num, c] 计算每一张图片的mask
+            for idx, imgs_activations_score in enumerate(layer_activations_score):
                 # [c]
-                layer_mask = activations_scores[i].gt(thresholds[i]).to(device)
-                # [layer_num, c]
-                one_img_mask.append(layer_mask)
+                sorted_tensor, index = torch.sort(imgs_activations_score)
+                threshold_index = int(len(sorted_tensor) * percent)
+                threshold = sorted_tensor[threshold_index]
+                one_img_mask = imgs_activations_score.gt(threshold)
+                layer_masks[idx] = one_img_mask
 
-            imgs_masks.append(one_img_mask)
+            # 2.1 使用或
+            # one_layer_mask = layer_masks[0]
+            # # [img_num, c] => [c]  [800, 64] => [64]
+            # for img in layer_masks[1:]:
+            #     for channel_id, channel_mask in enumerate(img):
+            #         one_layer_mask[channel_id] = one_layer_mask[channel_id] | channel_mask
 
-        # 清空不使用的列表
-        activations_list.clear()
-        activations_scores.clear()
-        thresholds.clear()
+            # 2.2 统计true数量
+            # [c]  [64]
+            score_num = torch.sum(layer_masks, dim=0)
+            print(score_num)
+            sorted_tensor, _ = torch.sort(score_num)
+            score_threshold_index = int(len(sorted_tensor) * percent)
+            score_threshold = sorted_tensor[score_threshold_index]
+            one_layer_mask = score_num.gt(score_threshold)
 
-        # 合并 [image_num, layer_num, c] => [layer_num, c]
-        img_num = len(imgs_masks)
-        layer_num = len(imgs_masks[0])
-        masks = imgs_masks[0]
-
-        for i in range(layer_num):
-            for j in range(1, img_num):
-                masks[i] = masks[i] | imgs_masks[j][i]
+            masks.append(one_layer_mask)
 
         return masks
 
@@ -279,7 +324,7 @@ if __name__ == '__main__':
     model_id = 0  # 保存模型的id
 
     fine_tuning_epoch = 50
-    manual_radio = 0.97
+    manual_radio = 0.8
 
     fine_tuning_lr = 0.001
     fine_tuning_batch_size = 128
@@ -287,7 +332,7 @@ if __name__ == '__main__':
 
     use_KL_divergence = True
     divide_radio = 1
-    redundancy_num = 150
+    redundancy_num = 0
 
     record_imgs_num = 512
     record_batch = 128
@@ -331,124 +376,130 @@ if __name__ == '__main__':
             _ = model(forward_x)
     hook.remove()
 
-    # ----------第二部：根据前向推理图片获取保留的类，并计算mask，进行剪枝，获得剪枝后的新模型
-    # 从记录数据中选取一部分计算mask
-    imgs_tensor = choose_mask_imgs(target_class=reserved_classes,
-                                   data_loader=record_dataloader,
-                                   pics_num=100)
-    layer_masks = Compute_layer_mask(imgs=imgs_tensor, model=model, percent=manual_radio, device=device)
+    # 测试不同的激活函数
+    # [None, nn.ReLU(), nn.LeakyReLU(), F.relu6, nn.Sigmoid(), nn.Tanh(), nn.ELU(), nn.Hardswish()]
+    for act_func in [nn.ReLU()]:
+        # ----------第二部：根据前向推理图片获取保留的类，并计算mask，进行剪枝，获得剪枝后的新模型
+        # 从记录数据中选取一部分计算mask
+        # imgs_tensor = choose_mask_imgs(target_class=reserved_classes,
+        #                                data_loader=record_dataloader,
+        #                                pics_num=100)
+        # layer_masks = Compute_layer_mask(imgs=imgs_tensor, model=model, percent=manual_radio, device=device,
+        #                                  activation_func=act_func)
 
-    # 对比不同数量图片计算mask的作图
-    # rv_pics_num_list = [1, 2, 5, 10, 20, 40, 80, 120]
-    # for rv_pics_num in rv_pics_num_list:
-    #     imgs_tensor = choose_mask_imgs(target_class=reserved_classes,
-    #                                    data_loader=record_dataloader,
-    #                                    pics_num=rv_pics_num)
-    #     layer_masks = Compute_layer_mask(imgs=imgs_tensor, model=model, percent=manual_radio, device=device)
-    #
-    #
-    #     for idx, mask_ in enumerate(layer_masks):
-    #         mask = mask_.clone().cpu().numpy().reshape(1, -1)
-    #         try:
-    #             old_mask = np.load('./mask_numpy/Vgg16/layer' + str(idx + 1) + '.npy')
-    #             new_mask = np.vstack((old_mask, mask))
-    #             print(new_mask.shape)
-    #             np.save('./mask_numpy/Vgg16/layer' + str(idx + 1) + '.npy', new_mask)
-    #         except:
-    #             np.save('./mask_numpy/Vgg16/layer' + str(idx + 1) + '.npy', mask)
-    # exit(0)
-
-    # 预剪枝,计算mask
-    cfg, cfg_masks, filter_remove_radio = pre_processing_Pruning(model, layer_masks, jump_layers=2)
-    filter_remain_radio = 1 - filter_remove_radio
-
-    redundancy_num_list = [0, 32, 64, 80, 100, 128, 200, 256, 320]
-    for redundancy_num in redundancy_num_list:
-        for i in range(3):
-            # 根据cfg生成模型
-            new_model = vgg16(data_loader.dataset_num_class, cfg=cfg).to(device)
-            # 正式剪枝,参数拷贝
-            model_after_pruning = Real_Pruning(old_model=model, new_model=new_model,
-                                               cfg_masks=cfg_masks, reserved_class=reserved_classes)
-
-            # 计算多种压缩率标准
-            model.eval()
-            model_after_pruning.eval()
-            old_FLOPs, old_parameters = cal_FLOPs_and_Parameters(model, device)
-            new_FLOPs, new_parameters = cal_FLOPs_and_Parameters(model_after_pruning, device)
-            FLOPs_radio = new_FLOPs / old_FLOPs
-            Parameters_radio = new_parameters / old_parameters
-
-            # 剪枝后模型测试
-            # test_reserved_classes(model=model_after_pruning, device=device, reserved_classes=reserved_classes,
-            #                       test_data_loader=data_loader.test_data_loader, test_class=True, is_print=True)
-
-            # 多GPU微调
-            if torch.cuda.device_count() > 1:
-                print("Let's use", torch.cuda.device_count(), "GPUs!")
-                model_after_pruning = nn.DataParallel(model_after_pruning)
-            model_after_pruning.to(device)
-
-            print("model_id:" + str(model_id)
-                  + " ---filter_remain_radio:" + str(filter_remain_radio)
-                  + " ---FLOPs_radio:" + str(FLOPs_radio)
-                  + " ---Parameters_radio:" + str(Parameters_radio)
-                  + "  运行：")
+        # 对比不同数量图片计算mask的作图
+        rv_pics_num_list = [1, 2, 5, 10, 20, 40, 80, 120]
+        for rv_pics_num in rv_pics_num_list:
+            imgs_tensor = choose_mask_imgs(target_class=reserved_classes,
+                                           data_loader=record_dataloader,
+                                           pics_num=rv_pics_num)
+            layer_masks = Compute_layer_mask(imgs=imgs_tensor, model=model, percent=manual_radio, device=device)
 
 
-            # ----------第三步：从前向推理记录的图片中，使用算法选取一部分进行微调
-            # --------------------------------------------- 微调
-            # 选取微调数据
-            fine_tuning_loader, max_kc, min_kc = get_fine_tuning_data_loader2(record_activations,
-                                                                              reserved_classes,
-                                                                              pics_num=fine_tuning_pics_num,
-                                                                              batch_size=fine_tuning_batch_size,
-                                                                              data_loader=record_dataloader,
-                                                                              redundancy_num=redundancy_num,
-                                                                              divide_radio=divide_radio,
-                                                                              use_max=True)
-            # 微调
-            best_acc, acc_list, loss_list = fine_tuning(model_after_pruning, reserved_classes,
-                                                        EPOCH=fine_tuning_epoch, lr=fine_tuning_lr,
-                                                        device=device,
-                                                        train_data_loader=fine_tuning_loader,
-                                                        test_data_loader=data_loader.test_data_loader,
-                                                        model_save_path=model_save_path,
-                                                        use_all_data=False,
-                                                        frozen=frozen)
+            for idx, mask_ in enumerate(layer_masks):
+                mask = mask_.clone().cpu().numpy().reshape(1, -1)
+                try:
+                    old_mask = np.load('./mask_numpy/Vgg16/layer' + str(idx + 1) + '.npy')
+                    new_mask = np.vstack((old_mask, mask))
+                    print(new_mask.shape)
+                    np.save('./mask_numpy/Vgg16/layer' + str(idx + 1) + '.npy', new_mask)
+                except:
+                    np.save('./mask_numpy/Vgg16/layer' + str(idx + 1) + '.npy', mask)
+        exit(0)
 
-            print("model_id:---" + str(model_id) +
-                  " best_acc:----" + str(best_acc) +
-                  " reserved_classes:---" + str(reserved_classes) +
-                  " manual_radio:---" + str(manual_radio) +
-                  " filter_remain_radio:---" + str(filter_remain_radio) +
-                  '\n')
+        # 预剪枝,计算mask
+        cfg, cfg_masks, filter_remove_radio = pre_processing_Pruning(model, layer_masks, jump_layers=2)
+        filter_remain_radio = 1 - filter_remove_radio
+        print(cfg)
 
-            with open(msg_save_path, "a") as fp:
-                space = " "
+        redundancy_num_list = [128]
+        for redundancy_num in redundancy_num_list:
+            for i in range(3):
+                # 根据cfg生成模型
+                new_model = vgg16(data_loader.dataset_num_class, cfg=cfg).to(device)
+                # 正式剪枝,参数拷贝
+                model_after_pruning = Real_Pruning(old_model=model, new_model=new_model,
+                                                   cfg_masks=cfg_masks, reserved_class=reserved_classes)
 
-                fp.write(str(version_id) + space +
-                         str(model_id) + space +
-                         str(round(best_acc + 0.0001, 4)) + space +
-                         str(fine_tuning_batch_size) + space +
-                         str(fine_tuning_pics_num) + space +
-                         str(fine_tuning_epoch) + space +
-                         str(fine_tuning_lr) + space +
-                         str(redundancy_num) + space +
-                         str(divide_radio) + space +
-                         str(use_KL_divergence) + space +
-                         str(round(manual_radio, 4)) + space +
-                         str(round(FLOPs_radio, 4)) + space +
-                         str(round(Parameters_radio, 4)) + space +
-                         str(round(filter_remain_radio, 4)) + space +
-                         str(reserved_classes) + space +
-                         str(max_kc) + space +
-                         str(min_kc) + space +
-                         version_msg + space +
-                         model_save_path + space +
-                         "\n")
+                # 计算多种压缩率标准
+                model.eval()
+                model_after_pruning.eval()
+                old_FLOPs, old_parameters = cal_FLOPs_and_Parameters(model, device)
+                new_FLOPs, new_parameters = cal_FLOPs_and_Parameters(model_after_pruning, device)
+                FLOPs_radio = new_FLOPs / old_FLOPs
+                Parameters_radio = new_parameters / old_parameters
 
-            model_id += 1
+                # 剪枝后模型测试
+                # test_reserved_classes(model=model_after_pruning, device=device, reserved_classes=reserved_classes,
+                #                       test_data_loader=data_loader.test_data_loader, test_class=True, is_print=True)
+
+                # 多GPU微调
+                if torch.cuda.device_count() > 1:
+                    print("Let's use", torch.cuda.device_count(), "GPUs!")
+                    model_after_pruning = nn.DataParallel(model_after_pruning)
+                model_after_pruning.to(device)
+
+                print("model_id:" + str(model_id)
+                      + " ---filter_remain_radio:" + str(filter_remain_radio)
+                      + " ---FLOPs_radio:" + str(FLOPs_radio)
+                      + " ---Parameters_radio:" + str(Parameters_radio)
+                      + "  运行：")
+
+
+                # ----------第三步：从前向推理记录的图片中，使用算法选取一部分进行微调
+                # --------------------------------------------- 微调
+                # 选取微调数据
+                fine_tuning_loader, max_kc, min_kc = get_fine_tuning_data_loader2(record_activations,
+                                                                                  reserved_classes,
+                                                                                  pics_num=fine_tuning_pics_num,
+                                                                                  batch_size=fine_tuning_batch_size,
+                                                                                  data_loader=record_dataloader,
+                                                                                  redundancy_num=redundancy_num,
+                                                                                  divide_radio=divide_radio,
+                                                                                  use_max=True)
+                # 微调
+                best_acc, acc_list, loss_list = fine_tuning(model_after_pruning, reserved_classes,
+                                                            EPOCH=fine_tuning_epoch, lr=fine_tuning_lr,
+                                                            device=device,
+                                                            train_data_loader=fine_tuning_loader,
+                                                            test_data_loader=data_loader.test_data_loader,
+                                                            model_save_path=model_save_path,
+                                                            use_all_data=False,
+                                                            frozen=frozen)
+
+                print("model_id:---" + str(model_id) +
+                      " best_acc:----" + str(best_acc) +
+                      " reserved_classes:---" + str(reserved_classes) +
+                      " manual_radio:---" + str(manual_radio) +
+                      " filter_remain_radio:---" + str(filter_remain_radio) +
+                      '\n')
+
+                with open(msg_save_path, "a") as fp:
+                    space = " "
+
+                    fp.write(str(version_id) + space +
+                             str(model_id) + space +
+                             str(round(best_acc + 0.0001, 4)) + space +
+                             str(fine_tuning_batch_size) + space +
+                             str(fine_tuning_pics_num) + space +
+                             str(fine_tuning_epoch) + space +
+                             str(fine_tuning_lr) + space +
+                             str(redundancy_num) + space +
+                             str(divide_radio) + space +
+                             str(use_KL_divergence) + space +
+                             str(round(manual_radio, 4)) + space +
+                             str(round(FLOPs_radio, 4)) + space +
+                             str(round(Parameters_radio, 4)) + space +
+                             str(round(filter_remain_radio, 4)) + space +
+                             str(act_func) + space +
+                             str(reserved_classes) + space +
+                             str(max_kc) + space +
+                             str(min_kc) + space +
+                             version_msg + space +
+                             model_save_path + space +
+                             "\n")
+
+                model_id += 1
 
     with open(msg_save_path, "a") as fp:
         fp.write("\n")

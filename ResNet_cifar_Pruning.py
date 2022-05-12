@@ -1,3 +1,5 @@
+import winnt
+
 from models.ResNet_cifar_Model import *
 
 from utils.Data_loader import Data_Loader_CIFAR
@@ -14,47 +16,14 @@ def acvition_hook(model, input, output):
     activations.append(output.clone().detach().cpu())
     return
 
-
-def Compute_activation_scores(activations_):
-    """
-    :argument 计算每个通道评价标准(重要性)
-    :param activations_: [c,h,w]
-    :return: [c]
-    """
-    activations_scores = []
-    for activation in activations_:
-        activation = F.leaky_relu(activation)
-        # activation = F.relu(activation)
-        # 一阶范数
-        # activations_scores.append(activation.norm(dim=(1, 2), p=1))
-        # 二阶范数
-        activations_scores.append(activation.norm(dim=(1, 2), p=2))
-        # 秩
-        # activations_scores.append(torch.linalg.matrix_rank(activation))
-    return activations_scores
-
-
-def Compute_activation_thresholds(activations_scores, percent):
-    """
-    :argument 通过channel的重要性水平，算出阈值
-    :param activations_scores: 通道重要性
-    :param percent: 剪枝比例(剪掉的比率)
-    :return: 输出对每个bn层的阈值
-    """
-
-    thresholds = []
-    for tensor in activations_scores:
-        sorted_tensor, index = torch.sort(tensor)
-
-        total = len(sorted_tensor)
-        threshold_index = int(total * percent)
-        threshold = sorted_tensor[threshold_index]
-
-        # threshold = sorted_tensor.mean()
-
-        thresholds.append(threshold)
-
-    return thresholds
+# 记录前向推理使用的activation_hook
+def forward_activation_hook(module, input, output):
+    global record_activations
+    # input_size [b, 256, 8, 8]
+    # output_size [b, 256, 1, 1]
+    record = output.clone().detach().view(output.size(0), -1).cpu()
+    record_activations.append(record)
+    return
 
 
 def Compute_layer_mask(imgs, model, percent, device):
@@ -267,11 +236,6 @@ def Real_Pruning(old_model: nn.Module, new_model: nn.Module, cfg_masks, reserved
 
                 new_module.weight.data = conv_weight.clone()
 
-                # print(conv_weight.size())
-                # print(new_module.weight.data.size())
-                # print(old_module.weight.data.size())
-                # print()
-
                 conv_idx += 1
 
         # 对齐最后linear层于卷积的输出
@@ -295,12 +259,6 @@ def Real_Pruning(old_model: nn.Module, new_model: nn.Module, cfg_masks, reserved
             new_model.fc.weight.data = fc_data.clone()
             new_model.fc.bias.data = old_module.bias.data.clone()[out_mask]
 
-    # test
-    # aa = torch.randn(2, 3, 32, 32)
-    # aa = aa.to(device)
-    # print(new_model)
-    # out1 = old_model(aa)
-    # out2 = new_model(aa)
     return new_model
 
 
@@ -322,7 +280,6 @@ if __name__ == '__main__':
                                     dataSet=dataSet_name, use_data_Augmentation=False,
                                     download=False, train_shuffle=True)
 
-    # model = resnet56(num_classes=data_loader.dataset_num_class).to(device)
     # model = torch.load(f='./models/ResNet/resnet32_before_9393.pkl').to(device)
     model = torch.load(f='./models/ResNet/resnet56_before_9423.pkl').to(device)
     # model = torch.load(f='../input/resnet-pruning-cifar-code/models/ResNet/resnet56_before_9423.pkl').to(device)
@@ -341,23 +298,20 @@ if __name__ == '__main__':
     #                          [1, 2, 3, 4, 6, 7, 8, 9],
     #                          [1, 2, 3, 4, 5, 6, 7, 8, 9],
     #                          [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]
-    #
-    # reserved_classes_list = [[0, 1, 2, 3, 4, 5, 6, 7]]
 
     version_id = 18  # 指定
     model_id = 0  # 保存模型的id
 
     fine_tuning_epoch = 50
-    manual_radio = 0.67
+    manual_radio = 0.9
 
     fine_tuning_lr = 0.001
     fine_tuning_batch_size = 128
-    fine_tuning_pics_num = 64
+    fine_tuning_pics_num = 128
 
     use_KL_divergence = True
     divide_radio = 1
     redundancy_num = 0
-    # use_norm = True
 
     record_imgs_num = 512
     record_batch = 128
@@ -365,8 +319,6 @@ if __name__ == '__main__':
     frozen = False
 
     version_msg = "版本备注:方法2 kl选取 使用最大 图片池改为256 mile stone 20 40 batch size 256"
-    # version_msg = "版本备注:train的时候用eval训练,保持bn层数据不变"
-    # version_msg = "版本备注:冻结除bn和fc的其他层,bn层冻结"
 
     msg_save_path = "./msg/model_msg2.txt"
     model_save_path = './models/ResNet/version'
@@ -375,7 +327,6 @@ if __name__ == '__main__':
     model_save_path += str(version_id) + '_resnet56_after_model_' + str(model_id) + '.pkl'
 
     reserved_classes = [0, 1, 2, 3, 4, 5, 6, 7]
-    # reserved_classes = [1, 3, 4, 9]
     max_kc = None
     min_kc = None
     FLOPs_radio = 0.00
@@ -395,18 +346,16 @@ if __name__ == '__main__':
     with torch.no_grad():
         for forward_x, _ in record_dataloader:
             forward_x = forward_x.to(device)
-            # forward_label = forward_label.to(device)
             _ = model(forward_x)
-            # print(torch.max(F.softmax(out, dim=1), dim=1).values)
 
     hook.remove()
     # ----------第二部：根据前向推理图片获取保留的类，并计算mask，进行剪枝，获得剪枝后的新模型
-
     # 从记录数据中选取一部分计算mask
     imgs_tensor = choose_mask_imgs(target_class=reserved_classes,
                                    data_loader=record_dataloader,
                                    pics_num=10)
-    layer_masks = Compute_layer_mask(imgs=imgs_tensor, model=model, percent=manual_radio, device=device)
+    layer_masks = Compute_layer_mask(imgs=imgs_tensor, model=model, percent=manual_radio, device=device,
+                                     activation_func=nn.ReLU())
 
     # # 对比不同数量图片计算mask的作图
     # rv_pics_num_list = [1, 2, 5, 10, 20, 40, 80, 120]
@@ -432,12 +381,7 @@ if __name__ == '__main__':
     cfg, cfg_masks, filter_remove_radio = pre_processing_Pruning(model, layer_masks, jump_layers=3)
     filter_remain_radio = 1 - filter_remove_radio
 
-    # for reserved_classes in reserved_classes_list:
     redundancy_num_list = [0, 16, 32, 64, 80, 100, 128, 200, 256, 320]
-    # redundancy_num_list = [256]
-    # fine_tuning_epoch_list = [20, 50, 80]
-    # fine_tuning_pics_num_list = [256, 512, 1024]
-    # fine_tuning_pics_num_list = [128, 256, 512, 1024]
     for redundancy_num in redundancy_num_list:
         for i in range(3):
 
@@ -455,12 +399,12 @@ if __name__ == '__main__':
             model_after_pruning.to(device)
 
             # 计算多种压缩率标准
-            # model.eval()
-            # model_after_pruning.eval()
-            # old_FLOPs, old_parameters = cal_FLOPs_and_Parameters(model, device)
-            # new_FLOPs, new_parameters = cal_FLOPs_and_Parameters(model_after_pruning, device)
-            # FLOPs_radio = new_FLOPs / old_FLOPs
-            # Parameters_radio = new_parameters / old_parameters
+            model.eval()
+            model_after_pruning.eval()
+            old_FLOPs, old_parameters = cal_FLOPs_and_Parameters(model, device)
+            new_FLOPs, new_parameters = cal_FLOPs_and_Parameters(model_after_pruning, device)
+            FLOPs_radio = new_FLOPs / old_FLOPs
+            Parameters_radio = new_parameters / old_parameters
 
             print("model_id:" + str(model_id)
                   + " ---filter_remain_radio:" + str(filter_remain_radio)
@@ -469,14 +413,6 @@ if __name__ == '__main__':
                   + "  运行：")
 
             # ----------第三步：从前向推理记录的图片中，使用算法选取一部分进行微调
-
-            # fine_tuning_loader = get_fine_tuning_data_loader1(reserved_classes,
-            #                                                   pics_num=fine_tuning_pics_num,
-            #                                                   batch_size=fine_tuning_batch_size,
-            #                                                   data_loader=data_loader.train_data_loader,
-            #                                                   redundancy_num=redundancy_num,
-            #                                                   use_KL=False)
-
             fine_tuning_loader, max_kc, min_kc = get_fine_tuning_data_loader2(record_activations,
                                                                               reserved_classes,
                                                                               pics_num=fine_tuning_pics_num,
@@ -485,23 +421,7 @@ if __name__ == '__main__':
                                                                               redundancy_num=redundancy_num,
                                                                               divide_radio=divide_radio,
                                                                               use_max=True)
-
-            # fine_tuning_loader, max_kc, min_kc = get_fine_tuning_data_loader3(record_activations,
-            #                                                                   reserved_classes,
-            #                                                                   pics_num=fine_tuning_pics_num,
-            #                                                                   batch_size=fine_tuning_batch_size,
-            #                                                                   data_loader=record_dataloader,
-            #                                                                   redundancy_num=redundancy_num,
-            #                                                                   use_max=True)
-
-            # fine_tuning_loader, max_kc, min_kc = get_fine_tuning_data_loader4(record_activations,
-            #                                                                   reserved_classes,
-            #                                                                   pics_num=fine_tuning_pics_num,
-            #                                                                   batch_size=fine_tuning_batch_size,
-            #                                                                   data_loader=record_dataloader,
-            #                                                                   redundancy_num=redundancy_num,
-            #                                                                   use_max=True)
-
+            # 微调
             best_acc, acc_list, loss_list = fine_tuning(model_after_pruning, reserved_classes,
                                                         EPOCH=fine_tuning_epoch, lr=fine_tuning_lr,
                                                         device=device,
@@ -514,7 +434,6 @@ if __name__ == '__main__':
             # 画图
             # draw_acc_loss(acc_list=acc_list, loss_list=loss_list, line_id=model_id, vis=vis)
 
-            # --------------------------------------------- 微调
             print("model_id:---" + str(model_id) +
                   " best_acc:----" + str(best_acc) +
                   " reserved_classes:---" + str(reserved_classes) +
@@ -523,18 +442,6 @@ if __name__ == '__main__':
                   '\n')
 
             with open(msg_save_path, "a") as fp:
-                # fp.write("version_id:---" + str(version_id) +
-                #          "  model_id:---" + str(model_id) +
-                #          "  best_acc:----" + str(best_acc) +
-                #          "  fine_tuning_batch_size:---" + str(fine_tuning_batch_size) +
-                #          "  fine_tuning_pics_num:---" + str(fine_tuning_pics_num) +
-                #          "  fine_tuning_epoch:---" + str(fine_tuning_epoch) +
-                #          "  fine_tuning_lr:---" + str(fine_tuning_lr) +
-                #          "  manual_radio:---" + str(manual_radio) +
-                #          "  filter_remain_radio:---" + str(filter_remain_radio) +
-                #          "  reserved_classes:---" + str(reserved_classes) +
-                #          "  model_save_path---" + model_save_path +
-                #          "\n")
                 space = " "
 
                 fp.write(str(version_id) + space +
