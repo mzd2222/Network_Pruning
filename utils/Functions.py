@@ -193,8 +193,8 @@ def fine_tuning(model, reserved_classes, EPOCH, lr, model_save_path,
     loss_func = nn.CrossEntropyLoss()
     optimizer = optim.SGD(params=model.parameters(), lr=lr, weight_decay=5e-4, momentum=0.9)
     # optimizer = optim.AdamW(params=model.parameters(), lr=lr, weight_decay=1e-4)
-    # scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCH)
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 40], gamma=0.1)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCH)
+    # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 40], gamma=0.1)
 
     optimizer.zero_grad()
 
