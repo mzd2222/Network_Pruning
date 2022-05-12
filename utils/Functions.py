@@ -12,18 +12,40 @@ from utils.Channel_selection import channel_selection
 
 from copy import deepcopy
 import matplotlib.pyplot as plt
+from fvcore.nn import FlopCountAnalysis
 
-def read_Img_by_class(target_class, pics_num, data_loader, device):
+class myDataset(Dataset):
+    def __init__(self, img_list, label_list):
+        """
+        :argument 将图片数据和label数据转换为dataset类型，可以让fine-tuning直接调用。
+        :param img_list:
+        :param label_list:
+        """
+        self.img_list = img_list
+        self.label_list = label_list
+
+    def __getitem__(self, idx):
+        img, label = self.img_list[idx], self.label_list[idx]
+        return img, label
+
+    def __len__(self):
+        return len(self.img_list)
+
+
+def read_Img_by_class(target_class, pics_num, data_loader, batch_size, shuffle=True):
     """
+    :argument 模拟前向推理记录的数据集
+    :param batch_size:
     :param target_class: 读取类的标签 eg: [0, 1, 2, 3]
     :param pics_num:  每个类图片数量
     :param data_loader:  数据集 data_loader
-    :param device:
-    :return:
+    :return: data_loader
+    :param shuffle:
     """
 
     counts = []
     inputs = []
+    labels = []
 
     for idx in range(len(target_class)):
         counts.append(0)
@@ -81,8 +103,12 @@ def choose_mask_imgs(target_class, pics_num, data_loader):
         if sum(counts) == len(target_class) * pics_num:
             break
 
-    for idx, img in enumerate(inputs):
-        imgs[idx] = img
+        for idx in range(len(label)):
+            if counts[target_class.index(label[idx])] < pics_num:
+                inputs.append(data[idx])
+                counts[target_class.index(label[idx])] += 1
+
+    imgs = torch.stack(inputs, dim=0)
 
     return imgs
 
@@ -264,25 +290,7 @@ def fine_tuning(model, reserved_classes, EPOCH, lr, model_save_path,
     return best_acc, acc_list, loss_list
 
 
-class myDataset(Dataset):
-    def __init__(self, img_list, label_list):
-        """
-        :argument 将图片数据和label数据转换为dataset类型，可以让fine-tuning直接调用。
-        :param img_list:
-        :param label_list:
-        """
-        self.img_list = img_list
-        self.label_list = label_list
-
-    def __getitem__(self, idx):
-        img, label = self.img_list[idx], self.label_list[idx]
-        return img, label
-
-    def __len__(self):
-        return len(self.img_list)
-
-
-def get_fine_tuning_data_loader(reserved_classes, pics_num, data_loader, batch_size,
+def get_fine_tuning_data_loader1(reserved_classes, pics_num, data_loader, batch_size,
                                 use_KL=False, divide_radio=4, redundancy_num=50, use_norm=False):
     """
 

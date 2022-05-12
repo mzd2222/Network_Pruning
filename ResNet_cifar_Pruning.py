@@ -10,8 +10,8 @@ activations = []
 record_activations = []
 
 
-
-def acvition_hook(model, input, output):
+# 计算mask使用的activation_hook
+def mask_activation_hook(module, input, output):
     global activations
     activations.append(output.clone().detach().cpu())
     return
@@ -26,15 +26,18 @@ def forward_activation_hook(module, input, output):
     return
 
 
-def Compute_layer_mask(imgs, model, percent, device):
+def Compute_layer_mask(imgs, model, percent, device, activation_func):
     """
     :argument 根据输入图片计算masks
-    :param percent: 剪枝比例(剪掉的比率)
+    :param percent: 保留的比例
     :argument 根据输入图片获取模型的mask
     :param imgs: 输入图片tensor
     :param model:
+    :param activation_func:
     :return: masks 维度为 [layer_num, c]
     """
+
+    percent = 1 - percent  # 通过保留比例 计算出需要剪掉的比例percent
 
     global activations
     # 此处需要把模型更改为eval状态，否则在计算layer_mask时输入的数据会改变bn层参数，导致正确率下降
@@ -43,12 +46,11 @@ def Compute_layer_mask(imgs, model, percent, device):
     with torch.no_grad():
         imgs_masks = []
         hooks = []
-        activations_list = []
         activations.clear()
 
         for module in model.modules():
             if isinstance(module, nn.BatchNorm2d):
-                hook = module.register_forward_hook(acvition_hook)
+                hook = module.register_forward_hook(mask_activation_hook)
                 hooks.append(hook)
 
         imgs = imgs.to(device)
@@ -57,46 +59,33 @@ def Compute_layer_mask(imgs, model, percent, device):
         for hook in hooks:
             hook.remove()
 
-        # TODO: 优化一下实现
-        # 原本activations结构为[layer_num, pics_num, c, h, w] 转换为 [pics_num, layer_num, c, h, w]
-        # 外层对pics_num图片循环，内层对layer_num循环
-        for pics_idx in range(len(activations[0])):
-            one_img_activation = []
-            for layer_msg in activations:
-                one_img_activation.append(layer_msg[pics_idx])
-            activations_list.append(one_img_activation)
-        # 清空不使用的列表
-        activations.clear()
-
-        for activations_ in activations_list:
-            # 计算每个通道评价标准(重要性) [layer_num, c, h, w] => [layer_num, c]
-            activations_scores = Compute_activation_scores(activations_)
-            # 计算阈值thresholds [layer_num, c] => [layer_num, 1]
-            thresholds = Compute_activation_thresholds(activations_scores, percent)
-
-            one_img_mask = []
-            # 计算掩码 mask []
-            for i in range(len(thresholds)):
+        # ------版本2 一层一层处理
+        masks = []
+        for layer_activations in activations:
+            if activation_func is not None:
+                layer_activations = activation_func(layer_activations)
+            # [img_num, c, h, w] => [img_num, c] --- [800, 64, 32, 32] => [800, 64]
+            layer_activations_score = layer_activations.norm(dim=(2, 3), p=2)
+            # [img_num, c]  eg [800, 64]
+            layer_masks = torch.empty_like(layer_activations_score, dtype=torch.bool)
+            # [image_num, c] 计算每一张图片的mask
+            for idx, imgs_activations_score in enumerate(layer_activations_score):
                 # [c]
-                layer_mask = activations_scores[i].gt(thresholds[i]).to(device)
-                # [layer_num, c]
-                one_img_mask.append(layer_mask)
+                sorted_tensor, index = torch.sort(imgs_activations_score)
+                threshold_index = int(len(sorted_tensor) * percent)
+                threshold = sorted_tensor[threshold_index]
+                one_img_mask = imgs_activations_score.gt(threshold)
+                layer_masks[idx] = one_img_mask
 
-            imgs_masks.append(one_img_mask)
+            # 2.2 统计true数量
+            # [c]  [64]
+            score_num = torch.sum(layer_masks, dim=0)
+            sorted_tensor, _ = torch.sort(score_num)
+            score_threshold_index = int(len(sorted_tensor) * percent)
+            score_threshold = sorted_tensor[score_threshold_index]
+            one_layer_mask = score_num.gt(score_threshold)
 
-        # 清空不使用的列表
-        activations_list.clear()
-        activations_scores.clear()
-        thresholds.clear()
-
-        # 合并 [image_num, layer_num, c] => [layer_num, c]
-        img_num = len(imgs_masks)
-        layer_num = len(imgs_masks[0])
-        masks = imgs_masks[0]
-
-        for i in range(layer_num):
-            for j in range(1, img_num):
-                masks[i] = masks[i] | imgs_masks[j][i]
+            masks.append(one_layer_mask)
 
         return masks
 
@@ -335,11 +324,16 @@ if __name__ == '__main__':
     # --------------
     # ----------------------------------------------------------------------
 
-    imgs = read_Img_by_class(target_class=reserved_classes, pics_num=10,
-                             data_loader=data_loader.train_data_loader, device=device)
-    layer_masks = Compute_layer_mask(imgs=imgs, model=model, percent=manual_radio, device=device)
-    # --------------------------------------------- 预剪枝,计算mask
-    cfg, cfg_masks, pruned_radio = pre_processing_Pruning(model, layer_masks)
+    # ----------第一步：进行一定数量的前向推理forward，并记录图片和中间激活值
+    record_dataloader = read_Img_by_class(pics_num=record_imgs_num,
+                                          batch_size=record_batch,
+                                          target_class=reserved_classes,
+                                          data_loader=data_loader.train_data_loader,
+                                          shuffle=False)
+
+    for module in model.modules():
+        if isinstance(module, nn.AvgPool2d):
+            hook = module.register_forward_hook(forward_activation_hook)
 
     # 模拟实际前向推理(剪枝前)，记录数据
     model.eval()
