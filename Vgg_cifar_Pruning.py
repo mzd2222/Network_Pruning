@@ -171,7 +171,6 @@ def Compute_layer_mask(imgs, model, percent, device, activation_func):
             # 2.2 统计true数量
             # [c]  [64]
             score_num = torch.sum(layer_masks, dim=0)
-            print(score_num)
             sorted_tensor, _ = torch.sort(score_num)
             score_threshold_index = int(len(sorted_tensor) * percent)
             score_threshold = sorted_tensor[score_threshold_index]
@@ -381,31 +380,31 @@ if __name__ == '__main__':
     for act_func in [nn.ReLU()]:
         # ----------第二部：根据前向推理图片获取保留的类，并计算mask，进行剪枝，获得剪枝后的新模型
         # 从记录数据中选取一部分计算mask
-        # imgs_tensor = choose_mask_imgs(target_class=reserved_classes,
-        #                                data_loader=record_dataloader,
-        #                                pics_num=100)
-        # layer_masks = Compute_layer_mask(imgs=imgs_tensor, model=model, percent=manual_radio, device=device,
-        #                                  activation_func=act_func)
+        imgs_tensor = choose_mask_imgs(target_class=reserved_classes,
+                                       data_loader=record_dataloader,
+                                       pics_num=100)
+        layer_masks = Compute_layer_mask(imgs=imgs_tensor, model=model, percent=manual_radio, device=device,
+                                         activation_func=act_func)
 
         # 对比不同数量图片计算mask的作图
-        rv_pics_num_list = [1, 2, 5, 10, 20, 40, 80, 120]
-        for rv_pics_num in rv_pics_num_list:
-            imgs_tensor = choose_mask_imgs(target_class=reserved_classes,
-                                           data_loader=record_dataloader,
-                                           pics_num=rv_pics_num)
-            layer_masks = Compute_layer_mask(imgs=imgs_tensor, model=model, percent=manual_radio, device=device)
-
-
-            for idx, mask_ in enumerate(layer_masks):
-                mask = mask_.clone().cpu().numpy().reshape(1, -1)
-                try:
-                    old_mask = np.load('./mask_numpy/Vgg16/layer' + str(idx + 1) + '.npy')
-                    new_mask = np.vstack((old_mask, mask))
-                    print(new_mask.shape)
-                    np.save('./mask_numpy/Vgg16/layer' + str(idx + 1) + '.npy', new_mask)
-                except:
-                    np.save('./mask_numpy/Vgg16/layer' + str(idx + 1) + '.npy', mask)
-        exit(0)
+        # rv_pics_num_list = [1, 2, 5, 10, 20, 40, 80, 120]
+        # for rv_pics_num in rv_pics_num_list:
+        #     imgs_tensor = choose_mask_imgs(target_class=reserved_classes,
+        #                                    data_loader=record_dataloader,
+        #                                    pics_num=rv_pics_num)
+        #     layer_masks = Compute_layer_mask(imgs=imgs_tensor, model=model, percent=manual_radio, device=device)
+        #
+        #
+        #     for idx, mask_ in enumerate(layer_masks):
+        #         mask = mask_.clone().cpu().numpy().reshape(1, -1)
+        #         try:
+        #             old_mask = np.load('./mask_numpy/Vgg16/layer' + str(idx + 1) + '.npy')
+        #             new_mask = np.vstack((old_mask, mask))
+        #             print(new_mask.shape)
+        #             np.save('./mask_numpy/Vgg16/layer' + str(idx + 1) + '.npy', new_mask)
+        #         except:
+        #             np.save('./mask_numpy/Vgg16/layer' + str(idx + 1) + '.npy', mask)
+        # exit(0)
 
         # 预剪枝,计算mask
         cfg, cfg_masks, filter_remove_radio = pre_processing_Pruning(model, layer_masks, jump_layers=2)

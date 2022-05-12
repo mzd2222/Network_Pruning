@@ -406,6 +406,10 @@ if __name__ == '__main__':
             FLOPs_radio = new_FLOPs / old_FLOPs
             Parameters_radio = new_parameters / old_parameters
 
+            # 剪枝后模型测试
+            # test_reserved_classes(model=model_after_pruning, device=device, reserved_classes=reserved_classes,
+            #                       test_data_loader=data_loader.test_data_loader, test_class=True, is_print=True)
+
             print("model_id:" + str(model_id)
                   + " ---filter_remain_radio:" + str(filter_remain_radio)
                   + " ---FLOPs_radio:" + str(FLOPs_radio)
